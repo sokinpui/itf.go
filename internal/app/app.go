@@ -2,7 +2,6 @@ package app
 
 import (
 	"fmt"
-	"os"
 	"runtime/debug"
 
 	"itf/internal/cli"
@@ -17,9 +16,9 @@ import (
 
 // App orchestrates the entire application logic.
 type App struct {
-	cfg           *cli.Config
-	stateManager  *state.Manager
-	pathResolver  *fs.PathResolver
+	cfg            *cli.Config
+	stateManager   *state.Manager
+	pathResolver   *fs.PathResolver
 	sourceProvider *source.SourceProvider
 }
 
@@ -43,9 +42,9 @@ func New(cfg *cli.Config) (*App, error) {
 	sourceProvider := source.New(cfg)
 
 	return &App{
-		cfg:           cfg,
-		stateManager:  stateManager,
-		pathResolver:  pathResolver,
+		cfg:            cfg,
+		stateManager:   stateManager,
+		pathResolver:   pathResolver,
 		sourceProvider: sourceProvider,
 	}, nil
 }

@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"os"
 
-	"itf/internal/app"
+	application "itf/internal/app"
 	"itf/internal/cli"
 	"itf/internal/ui"
 )
@@ -16,7 +16,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	app, err := app.New(cfg)
+	app, err := application.New(cfg)
 	if err != nil {
 		ui.Error("Failed to initialize application: %v", err)
 		os.Exit(1)
@@ -27,7 +27,7 @@ func main() {
 		// This is a final catch-all.
 		ui.Error("An unexpected error occurred: %v", err)
 		// Add a more detailed error for debugging if needed.
-		if e, ok := err.(*app.DetailedError); ok {
+		if e, ok := err.(*application.DetailedError); ok {
 			fmt.Fprintf(os.Stderr, "\n--- Stack Trace ---\n%s\n", e.Stack)
 		}
 		os.Exit(1)

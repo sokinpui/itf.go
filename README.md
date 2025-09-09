@@ -9,25 +9,19 @@ Too lazy to copy and paste.
 Looking for free AI editor...
 
 ```
-usage: itf [-h] [-s] [-c] [-o] [-l DIR [DIR ...]] [-e EXT [EXT ...]] [-r | -R] [-f | -d | -a]
+Usage: itf [flags]
 
-Parse clipboard content or 'itf.txt' to update files and load them into Neovim.
+Parse content from stdin (pipe) or clipboard to update files in Neovim.
 
-options:
-  -h, --help            show this help message and exit
-  -s, --save            Save all modified buffers in Neovim after the update.
-  -c, --clipboard       Parse content from the clipboard instead of 'itf.txt'.
-  -o, --output-diff-fix
-                        print the diff that corrected start and count
-  -l, --lookup-dir DIR [DIR ...]
-                        change directory to look for files (default: current directory).
-  -e, --extension EXT [EXT ...]
-                        Filter to process only files with the specified extensions (e.g., 'py', 'js').
-  -r, --revert          Revert the last operation. support undo tree, multiple levels of undo
-  -R, --redo            Redo the last reverted operation, support redo tree, multiple levels of redo
-  -f, --file            ignore diff blocks, parse content files blocks only.
-  -d, --diff            parse only diff blocks, ignore content file blocks.
-  -a, --auto            parse both diff blocks and content file blocks.
+Example: pbpaste | itf -e py
+
+Flags:
+  -b, --buffer               Update buffers in Neovim without saving them to disk (changes are saved by default).
+  -e, --extension strings    Filter by extension. Use 'diff' to process only diff blocks (e.g., 'py', 'js', 'diff').
+  -l, --lookup-dir strings   Change directory to look for files (default: current directory).
+  -o, --output-diff-fix      Print the diff that corrected start and count.
+  -R, --redo                 Redo the last reverted operation.
+  -r, --revert               Revert the last operation.
 
 ```
 

@@ -1,28 +1,30 @@
 package state
 
 import (
-	"encoding/json"
+	"fmt"
 	"itf/internal/fs"
 	"itf/internal/ui"
 	"os"
 	"path/filepath"
 	"sort"
+	"strconv"
+	"strings"
 	"time"
 )
 
-const stateFileName = ".itf_state.json"
+const stateFileName = ".itf_state"
 
 // Operation represents a single file operation (create or modify).
 type Operation struct {
-	Path        string `json:"path"`
-	Action      string `json:"action"`
-	ContentHash string `json:"content_hash,omitempty"` // SHA256 hash of the file content after operation
+	Path        string
+	Action      string
+	ContentHash string // SHA256 hash of the file content after operation
 }
 
 // HistoryEntry represents one complete run of the tool.
 type HistoryEntry struct {
-	Timestamp  string      `json:"timestamp"`
-	Operations []Operation `json:"operations"`
+	Timestamp  int64
+	Operations []Operation
 }
 
 // State represents the entire state file.
@@ -44,7 +46,7 @@ func New() (*Manager, error) {
 	}
 	if err := m.load(); err != nil {
 		ui.Warning("Could not load state file, starting fresh: %v", err)
-		m.state = &State{CurrentIndex: -1}
+		m.state = &State{CurrentIndex: -1, History: []HistoryEntry{}}
 	}
 	return m, nil
 }
@@ -53,24 +55,94 @@ func (m *Manager) load() error {
 	data, err := os.ReadFile(m.statePath)
 	if err != nil {
 		if os.IsNotExist(err) {
-			m.state = &State{CurrentIndex: -1}
+			m.state = &State{CurrentIndex: -1, History: []HistoryEntry{}}
 			return nil
 		}
 		return err
 	}
-	if err := json.Unmarshal(data, &m.state); err != nil {
-		return err
+
+	content := string(data)
+	// Normalize line endings to LF
+	content = strings.ReplaceAll(content, "\r\n", "\n")
+	blocks := strings.Split(content, "\n\n")
+
+	if len(blocks) == 0 || blocks[0] == "" {
+		m.state = &State{CurrentIndex: -1, History: []HistoryEntry{}}
+		return nil
 	}
+
+	// First block is current index
+	index, err := strconv.Atoi(strings.TrimSpace(blocks[0]))
+	if err != nil {
+		return fmt.Errorf("invalid state file: could not parse current index: %w", err)
+	}
+
+	m.state = &State{CurrentIndex: index, History: []HistoryEntry{}}
+
+	if len(blocks) < 2 {
+		return nil // Only index, no history
+	}
+
+	historyBlocks := blocks[1:]
+	for _, block := range historyBlocks {
+		block = strings.TrimSpace(block)
+		if block == "" {
+			continue
+		}
+		lines := strings.Split(block, "\n")
+		if len(lines) == 0 {
+			continue
+		}
+
+		ts, err := strconv.ParseInt(lines[0], 10, 64)
+		if err != nil {
+			return fmt.Errorf("invalid state file: could not parse timestamp from '%s': %w", lines[0], err)
+		}
+
+		entry := HistoryEntry{Timestamp: ts}
+		opLines := lines[1:]
+		if len(opLines)%3 != 0 {
+			return fmt.Errorf("invalid state file: incomplete operation record")
+		}
+
+		for i := 0; i < len(opLines); i += 3 {
+			op := Operation{
+				Action:      opLines[i],
+				Path:        opLines[i+1],
+				ContentHash: opLines[i+2],
+			}
+			entry.Operations = append(entry.Operations, op)
+		}
+		m.state.History = append(m.state.History, entry)
+	}
+
 	return nil
 }
 
 func (m *Manager) save() {
-	data, err := json.MarshalIndent(m.state, "", "  ")
-	if err != nil {
-		ui.Error("Failed to serialize state: %v", err)
-		return
+	var blocks []string
+
+	// Current index block
+	blocks = append(blocks, fmt.Sprintf("%d", m.state.CurrentIndex))
+
+	// History entry blocks
+	for _, entry := range m.state.History {
+		var entryBuilder strings.Builder
+		entryBuilder.WriteString(fmt.Sprintf("%d\n", entry.Timestamp))
+
+		opLines := []string{}
+		for _, op := range entry.Operations {
+			opLines = append(opLines, op.Action)
+			opLines = append(opLines, op.Path)
+			opLines = append(opLines, op.ContentHash)
+		}
+		entryBuilder.WriteString(strings.Join(opLines, "\n"))
+		blocks = append(blocks, entryBuilder.String())
 	}
-	if err := os.WriteFile(m.statePath, data, 0644); err != nil {
+
+	content := strings.Join(blocks, "\n\n")
+
+	if err := os.WriteFile(m.statePath, []byte(content), 0644); err != nil {
 		ui.Error("Failed to write state file '%s': %v", m.statePath, err)
 	}
 }
@@ -82,7 +154,7 @@ func (m *Manager) Write(operations []Operation) {
 	}
 
 	newEntry := HistoryEntry{
-		Timestamp:  time.Now().UTC().Format(time.RFC3339),
+		Timestamp:  time.Now().UTC().Unix(),
 		Operations: operations,
 	}
 	m.state.History = append(m.state.History, newEntry)

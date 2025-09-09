@@ -12,7 +12,7 @@ import (
 	"time"
 )
 
-const stateFileName = ".itf_state"
+const stateFileName = ".state.itf"
 
 // Operation represents a single file operation (create or modify).
 type Operation struct {

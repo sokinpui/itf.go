@@ -110,7 +110,32 @@ func (a *App) applyChanges(plan *parser.ExecutionPlan) error {
 	defer manager.Close()
 
 	updatedFiles, failedFiles := manager.ApplyChanges(plan.Changes)
-	ui.PrintUpdateSummary(updatedFiles, failedFiles)
+
+	// Categorize files for a more detailed summary.
+	diffApplied := []string{}
+	modifiedByExt := []string{}
+	created := []string{}
+
+	changeSourceMap := make(map[string]string, len(plan.Changes))
+	for _, change := range plan.Changes {
+		changeSourceMap[change.Path] = change.Source
+	}
+
+	for _, path := range updatedFiles {
+		action := plan.FileActions[path]
+		source := changeSourceMap[path]
+
+		if action == "create" {
+			created = append(created, path)
+		} else if action == "modify" {
+			if source == "diff" {
+				diffApplied = append(diffApplied, path)
+			} else { // "codeblock"
+				modifiedByExt = append(modifiedByExt, path)
+			}
+		}
+	}
+	ui.PrintUpdateSummary(diffApplied, modifiedByExt, created, failedFiles)
 
 	if len(updatedFiles) > 0 {
 		if !a.cfg.Buffer { // Save by default

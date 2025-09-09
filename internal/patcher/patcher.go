@@ -64,6 +64,7 @@ func GeneratePatchedContents(diffs []model.DiffBlock, resolver *fs.PathResolver,
 		changes = append(changes, model.FileChange{
 			Path:    resolver.Resolve(diff.FilePath),
 			Content: appliedContent,
+			Source:  "diff",
 		})
 	}
 	return changes, nil

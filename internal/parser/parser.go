@@ -104,6 +104,7 @@ func parseFileBlocks(allBlocks []CodeBlock, resolver *fs.PathResolver, extension
 		blocks = append(blocks, model.FileChange{
 			Path:    resolver.Resolve(filePath),
 			Content: lines,
+			Source:  "codeblock",
 		})
 	}
 	return blocks

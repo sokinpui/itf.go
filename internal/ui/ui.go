@@ -48,11 +48,29 @@ func Prompt(format string, a ...interface{}) string {
 
 // --- Summaries ---
 
-func PrintUpdateSummary(updated, failed []string) {
+func PrintUpdateSummary(diffApplied, modifiedByExt, created, failed []string) {
 	Header("\n--- Update Summary ---")
-	if len(updated) > 0 {
-		Success("Successfully updated %d file(s) in Neovim:", len(updated))
-		for _, f := range updated {
+
+	if len(diffApplied) == 0 && len(modifiedByExt) == 0 && len(created) == 0 && len(failed) == 0 {
+		Info("No files were updated.")
+		return
+	}
+
+	if len(diffApplied) > 0 {
+		Success("Applied diff to %d file(s):", len(diffApplied))
+		for _, f := range diffApplied {
+			fmt.Printf("  - %s\n", f)
+		}
+	}
+	if len(modifiedByExt) > 0 {
+		Success("Modified %d file(s) via code block:", len(modifiedByExt))
+		for _, f := range modifiedByExt {
+			fmt.Printf("  - %s\n", f)
+		}
+	}
+	if len(created) > 0 {
+		Success("Created %d new file(s):", len(created))
+		for _, f := range created {
 			fmt.Printf("  - %s\n", f)
 		}
 	}

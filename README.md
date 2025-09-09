@@ -3,7 +3,9 @@ golang rewrite of python [itf](https://github.com/sokinpui/itf)
 # ITF: Insert To File
 
 Tired of copying code from LLM Web interfaces.
-Too lazy to copy and paste
+
+Too lazy to copy and paste.
+
 Looking for free AI editor...
 
 ```

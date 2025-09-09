@@ -25,25 +25,25 @@ func New(cfg *cli.Config) *SourceProvider {
 
 // GetContent retrieves content from the clipboard or a file based on flags.
 func (sp *SourceProvider) GetContent() (string, error) {
-	// Special auto-detection logic for auto or diff-fix modes.
-	isAutoOrFix := sp.cfg.Auto || sp.cfg.OutputDiffFix
-	if isAutoOrFix {
-		if !sp.cfg.OutputDiffFix {
-			ui.Header("--- Auto mode: searching for content ---")
-		}
-		content, _ := clipboard.ReadAll()
-		if strings.TrimSpace(content) != "" {
-			ui.Info("-> Found content in clipboard.")
-			return content, nil
-		}
-		ui.Info("-> Clipboard is empty, falling back to '%s'.", sourceFileName)
-		return sp.readFromFile()
-	}
-
 	if sp.cfg.Clipboard {
+		ui.Header("--- Reading from clipboard ---")
 		return clipboard.ReadAll()
 	}
 
+	// Default behavior is auto-detection: try clipboard first, then the file.
+	if !sp.cfg.OutputDiffFix {
+		ui.Header("--- Searching for content ---")
+	}
+	content, err := clipboard.ReadAll()
+	if err == nil && strings.TrimSpace(content) != "" {
+		ui.Info("-> Found content in clipboard.")
+		return content, nil
+	}
+	if err != nil {
+		ui.Info("-> Could not read from clipboard, falling back to '%s'.", sourceFileName)
+	} else {
+		ui.Info("-> Clipboard is empty, falling back to '%s'.", sourceFileName)
+	}
 	return sp.readFromFile()
 }
 

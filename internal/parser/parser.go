@@ -11,15 +11,6 @@ import (
 	"strings"
 )
 
-// Mode defines the parsing strategy.
-type Mode int
-
-const (
-	ModeAuto Mode = iota
-	ModeFiles
-	ModeDiffs
-)
-
 // ExecutionPlan contains all the changes and setup needed for an operation.
 type ExecutionPlan struct {
 	Changes      []model.FileChange
@@ -37,22 +28,28 @@ var (
 )
 
 // CreatePlan parses content and generates a plan of file changes.
-func CreatePlan(content string, mode Mode, resolver *fs.PathResolver, extensions []string) (*ExecutionPlan, error) {
+func CreatePlan(content string, resolver *fs.PathResolver, extensions []string) (*ExecutionPlan, error) {
 	var fileBlocks []model.FileChange
-	var diffBlocks []model.DiffBlock
 
-	if mode == ModeAuto || mode == ModeFiles {
+	// If '.diff' is the ONLY extension, we are in a special diff-only mode.
+	isDiffOnlyMode := len(extensions) == 1 && extensions[0] == ".diff"
+
+	if !isDiffOnlyMode {
+		// Normal mode: parse file blocks, filtering by extensions (if any).
+		// An empty extensions list means "no filter".
 		fileBlocks = parseFileBlocks(content, resolver, extensions)
 	}
-	if mode == ModeAuto || mode == ModeDiffs {
-		diffBlocks = ExtractDiffBlocks(content)
-	}
 
-	if mode == ModeAuto {
-		ui.Header("--- Auto-detecting and applying changes ---")
-	}
+	diffBlocks := ExtractDiffBlocks(content)
 
-	patchedChanges, err := patcher.GeneratePatchedContents(diffBlocks, resolver, extensions)
+	ui.Header("--- Applying changes ---")
+
+	patcherExtensions := extensions
+	if isDiffOnlyMode {
+		// In diff-only mode, don't filter patches by extension.
+		patcherExtensions = []string{}
+	}
+	patchedChanges, err := patcher.GeneratePatchedContents(diffBlocks, resolver, patcherExtensions)
 	if err != nil {
 		return nil, fmt.Errorf("failed during patch generation: %w", err)
 	}

@@ -68,18 +68,14 @@ func (a *App) Run() (err error) {
 		return a.redoLastOperation()
 	case a.cfg.OutputDiffFix:
 		return a.fixAndPrintDiffs()
-	case a.cfg.File:
-		return a.processContent(parser.ModeFiles)
-	case a.cfg.Diff:
-		return a.processContent(parser.ModeDiffs)
-	default: // Default is Auto mode
-		return a.processContent(parser.ModeAuto)
+	default:
+		return a.processContent()
 	}
 }
 
 // processContent handles the core logic of parsing source, planning changes,
 // and applying them in Neovim.
-func (a *App) processContent(mode parser.Mode) error {
+func (a *App) processContent() error {
 	content, err := a.sourceProvider.GetContent()
 	if err != nil {
 		return err
@@ -89,7 +85,7 @@ func (a *App) processContent(mode parser.Mode) error {
 		return nil
 	}
 
-	plan, err := parser.CreatePlan(content, mode, a.pathResolver, a.cfg.Extensions)
+	plan, err := parser.CreatePlan(content, a.pathResolver, a.cfg.Extensions)
 	if err != nil {
 		return fmt.Errorf("failed to create execution plan: %w", err)
 	}

@@ -113,12 +113,12 @@ func (a *App) applyChanges(plan *parser.ExecutionPlan) error {
 	ui.PrintUpdateSummary(updatedFiles, failedFiles)
 
 	if len(updatedFiles) > 0 {
-		if a.cfg.Save {
+		if !a.cfg.Buffer { // Save by default
 			manager.SaveAllBuffers()
 			ops := state.CreateOperations(updatedFiles, plan.FileActions)
 			a.stateManager.Write(ops)
 		} else {
-			ui.Warning("\nChanges are not saved. Use -s/--save to persist them.")
+			ui.Warning("\nChanges are loaded into buffers but not saved to disk.")
 			ui.Warning("Revert will not be available for this operation.")
 		}
 	}

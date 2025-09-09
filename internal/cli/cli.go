@@ -8,7 +8,7 @@ import (
 
 // Config holds all the command-line flag values.
 type Config struct {
-	Save           bool
+	Buffer         bool
 	Clipboard      bool
 	OutputDiffFix  bool
 	Revert         bool
@@ -22,7 +22,7 @@ func ParseFlags() (*Config, error) {
 	cfg := &Config{}
 
 	// Define flags
-	pflag.BoolVarP(&cfg.Save, "save", "s", false, "Save all modified buffers in Neovim after the update.")
+	pflag.BoolVarP(&cfg.Buffer, "buffer", "b", false, "Update buffers in Neovim without saving them to disk (changes are saved by default).")
 	pflag.BoolVarP(&cfg.Clipboard, "clipboard", "c", false, "Parse content from the clipboard instead of 'itf.txt'.")
 	pflag.BoolVarP(&cfg.OutputDiffFix, "output-diff-fix", "o", false, "Print the diff that corrected start and count.")
 	pflag.StringSliceVarP(&cfg.LookupDirs, "lookup-dir", "l", []string{}, "Change directory to look for files (default: current directory).")

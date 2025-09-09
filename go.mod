@@ -7,6 +7,7 @@ require (
 	github.com/fatih/color v1.18.0
 	github.com/neovim/go-client v1.2.1
 	github.com/spf13/pflag v1.0.10
+	github.com/yuin/goldmark v1.7.13
 )
 
 require (

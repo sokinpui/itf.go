@@ -2,8 +2,8 @@ package parser
 
 import (
 	"fmt"
-	"itf/internal/model"
 	"itf/internal/fs"
+	"itf/internal/model"
 	"itf/internal/patcher"
 	"itf/internal/ui"
 	"path/filepath"
@@ -19,38 +19,26 @@ type ExecutionPlan struct {
 }
 
 var (
-	// anyCodeBlockRegex finds any code block, with or without a preceding hint line.
-	// It's used for finding all blocks, including diffs which might not have hints.
-	anyCodeBlockRegex = regexp.MustCompile(
-		`(?m)(?:^(?P<hint_line>[^\n]*)\n(?:\s*\n)?)?` +
-			`^` + "```" + `(?P<lang>[a-z]*)\s*\n` +
-			`(?P<content>[\s\S]*?)` +
-			`^\s*` + "```" + `\s*$`)
-
-	// fileBlockWithHintRegex requires a non-empty hint line to exist before the code block.
-	// This is used to specifically find file blocks that are meant to be processed.
-	fileBlockWithHintRegex = regexp.MustCompile(
-		`(?m)^(?:(?P<hint_line>[^\n]+)\n(?:\s*\n)?)` +
-			`^` + "```" + `(?P<lang>[a-z]*)\s*\n` +
-			`(?P<content>[\s\S]*?)` +
-			`^\s*` + "```" + `\s*$`)
+	// pathInHintRegex extracts a path from a hint line, e.g., `path/to/file.go`.
 	pathInHintRegex = regexp.MustCompile("`([^`\n]+)`")
 )
 
 // CreatePlan parses content and generates a plan of file changes.
 func CreatePlan(content string, resolver *fs.PathResolver, extensions []string) (*ExecutionPlan, error) {
-	var fileBlocks []model.FileChange
+	allBlocks, err := ExtractCodeBlocks([]byte(content))
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse markdown content: %w", err)
+	}
 
 	// If '.diff' is the ONLY extension, we are in a special diff-only mode.
 	isDiffOnlyMode := len(extensions) == 1 && extensions[0] == ".diff"
 
+	var fileBlocks []model.FileChange
 	if !isDiffOnlyMode {
-		// Normal mode: parse file blocks, filtering by extensions (if any).
-		// An empty extensions list means "no filter".
-		fileBlocks = parseFileBlocks(content, resolver, extensions)
+		fileBlocks = parseFileBlocks(allBlocks, resolver, extensions)
 	}
 
-	diffBlocks := ExtractDiffBlocks(content)
+	diffBlocks := extractDiffBlocksFromParsed(allBlocks)
 
 	ui.Header("--- Applying changes ---")
 
@@ -89,23 +77,15 @@ func CreatePlan(content string, resolver *fs.PathResolver, extensions []string) 
 	}, nil
 }
 
-func parseFileBlocks(content string, resolver *fs.PathResolver, extensions []string) []model.FileChange {
-	matches := fileBlockWithHintRegex.FindAllStringSubmatch(content, -1)
+func parseFileBlocks(allBlocks []CodeBlock, resolver *fs.PathResolver, extensions []string) []model.FileChange {
 	var blocks []model.FileChange
 
-	for _, match := range matches {
-		result := make(map[string]string)
-		for i, name := range fileBlockWithHintRegex.SubexpNames() {
-			if i != 0 && name != "" {
-				result[name] = match[i]
-			}
-		}
-
-		if result["lang"] == "diff" {
+	for _, block := range allBlocks {
+		if block.Lang == "diff" {
 			continue // Diffs are handled separately.
 		}
 
-		filePath := extractPathFromHint(result["hint_line"])
+		filePath := extractPathFromHint(block.Hint)
 		if filePath == "" {
 			continue
 		}
@@ -114,7 +94,7 @@ func parseFileBlocks(content string, resolver *fs.PathResolver, extensions []str
 			continue
 		}
 
-		blockContent := strings.TrimRight(result["content"], "\n")
+		blockContent := strings.TrimRight(block.Content, "\n")
 		lines := strings.Split(blockContent, "\n")
 		// Handle empty blocks correctly.
 		if len(lines) == 1 && lines[0] == "" {
@@ -131,22 +111,26 @@ func parseFileBlocks(content string, resolver *fs.PathResolver, extensions []str
 
 // ExtractDiffBlocks finds all diff blocks in the content.
 func ExtractDiffBlocks(content string) []model.DiffBlock {
-	matches := anyCodeBlockRegex.FindAllStringSubmatch(content, -1)
+	allBlocks, err := ExtractCodeBlocks([]byte(content))
+	if err != nil {
+		// This function is also used for non-critical paths like --output-diff-fix,
+		// so we warn instead of returning an error.
+		ui.Warning("Could not parse markdown for diff blocks: %v", err)
+		return nil
+	}
+	return extractDiffBlocksFromParsed(allBlocks)
+}
+
+// extractDiffBlocksFromParsed is a helper to process already-parsed blocks.
+func extractDiffBlocksFromParsed(allBlocks []CodeBlock) []model.DiffBlock {
 	var diffs []model.DiffBlock
 
-	for _, match := range matches {
-		result := make(map[string]string)
-		for i, name := range anyCodeBlockRegex.SubexpNames() {
-			if i != 0 && name != "" {
-				result[name] = match[i]
-			}
-		}
-
-		if result["lang"] != "diff" {
+	for _, block := range allBlocks {
+		if block.Lang != "diff" {
 			continue
 		}
 
-		rawContent := strings.TrimSpace(result["content"])
+		rawContent := strings.TrimSpace(block.Content)
 		filePath := patcher.ExtractPathFromDiff(rawContent)
 		if filePath == "" {
 			ui.Warning("Found a diff block but could not extract a file path. Skipping.")

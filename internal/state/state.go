@@ -2,6 +2,7 @@ package state
 
 import (
 	"encoding/json"
+	"itf/internal/fs"
 	"itf/internal/ui"
 	"os"
 	"path/filepath"
@@ -13,8 +14,9 @@ const stateFileName = ".itf_state.json"
 
 // Operation represents a single file operation (create or modify).
 type Operation struct {
-	Path   string `json:"path"`
-	Action string `json:"action"`
+	Path        string `json:"path"`
+	Action      string `json:"action"`
+	ContentHash string `json:"content_hash,omitempty"` // SHA256 hash of the file content after operation
 }
 
 // HistoryEntry represents one complete run of the tool.
@@ -118,7 +120,15 @@ func (m *Manager) GetOperationsToRedo() []Operation {
 func CreateOperations(updatedFiles []string, fileActions map[string]string) []Operation {
 	ops := make([]Operation, len(updatedFiles))
 	for i, f := range updatedFiles {
-		ops[i] = Operation{Path: f, Action: fileActions[f]}
+		hash, err := fs.GetFileSHA256(f)
+		if err != nil {
+			ui.Warning("Could not calculate hash for '%s', revert might not work as expected: %v", f, err)
+		}
+		ops[i] = Operation{
+			Path:        f,
+			Action:      fileActions[f],
+			ContentHash: hash,
+		}
 	}
 	sort.Slice(ops, func(i, j int) bool {
 		return ops[i].Path < ops[j].Path

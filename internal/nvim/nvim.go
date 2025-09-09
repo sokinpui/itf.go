@@ -2,6 +2,7 @@ package nvim
 
 import (
 	"fmt"
+	"itf/internal/fs"
 	"itf/internal/model"
 	"itf/internal/state"
 	"itf/internal/ui"
@@ -161,7 +162,7 @@ func (m *Manager) RevertFiles(ops []state.Operation) (reverted, failed []string)
 	bar := ui.NewProgressBar(len(ops), "Reverting files:")
 	bar.Start()
 	for _, op := range ops {
-		if m.revertFile(op.Path, op.Action) {
+		if m.revertFile(op) {
 			reverted = append(reverted, op.Path)
 		} else {
 			failed = append(failed, op.Path)
@@ -172,30 +173,54 @@ func (m *Manager) RevertFiles(ops []state.Operation) (reverted, failed []string)
 	return reverted, failed
 }
 
-func (m *Manager) revertFile(filePath, action string) bool {
-	absPath, _ := filepath.Abs(filePath)
+func (m *Manager) revertFile(op state.Operation) bool {
+	currentHash, err := fs.GetFileSHA256(op.Path)
+	if err != nil {
+		if os.IsNotExist(err) {
+			// If the file doesn't exist, the revert is considered successful.
+			ui.Info("\nFile '%s' already deleted.", op.Path)
+			return true
+		}
+		ui.Error("\nCould not read file '%s' to check for revert: %v", op.Path, err)
+		return false
+	}
+
+	// Core safety check: if the file has been changed, abort the revert for this file.
+	if currentHash != op.ContentHash {
+		ui.Warning("\nFile '%s' has been modified since the last operation.", op.Path)
+		ui.Warning("Skipping revert to prevent data loss.")
+		return false
+	}
+
+	// If hashes match, it's safe to proceed.
+	if op.Action == "create" {
+		ui.Info("\nFile '%s' is unchanged since creation. Deleting.", op.Path)
+		if err := os.Remove(op.Path); err != nil {
+			ui.Error("\nFailed to delete file '%s': %v", op.Path, err)
+			return false
+		}
+
+		// Attempt to remove parent directory if it's empty
+		parentDir := filepath.Dir(op.Path)
+		if isEmpty, _ := fs.IsEmpty(parentDir); isEmpty {
+			if err := os.Remove(parentDir); err == nil {
+				ui.Info("Removed empty parent directory '%s'.", parentDir)
+			}
+		}
+		return true
+	}
+
+	// This is for "modify" action, since "create" is handled above.
+	absPath, _ := filepath.Abs(op.Path)
 	b := m.nvim.NewBatch()
 	b.Command(fmt.Sprintf("edit! %s", absPath))
 	b.Command("undo")
-
+	b.Command("write")
 	if err := b.Execute(); err != nil {
-		ui.Error("\nError reverting '%s': %v", filePath, err)
+		ui.Error("\nError reverting '%s': %v", op.Path, err)
 		return false
 	}
 
-	if action == "create" {
-		lines, err := m.nvim.BufferLines(0, 0, -1, false)
-		if err == nil && len(lines) == 0 {
-			m.nvim.Command("bwipeout!")
-			os.Remove(absPath)
-			return true
-		}
-	}
-
-	if err := m.nvim.Command("write"); err != nil {
-		ui.Error("\nError saving reverted file '%s': %v", filePath, err)
-		return false
-	}
 	return true
 }
 

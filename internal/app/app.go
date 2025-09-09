@@ -39,7 +39,7 @@ func New(cfg *cli.Config) (*App, error) {
 		return nil, fmt.Errorf("failed to initialize state manager: %w", err)
 	}
 	pathResolver := fs.NewPathResolver(cfg.LookupDirs)
-	sourceProvider := source.New(cfg)
+	sourceProvider := source.New()
 
 	return &App{
 		cfg:            cfg,

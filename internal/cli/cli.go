@@ -9,7 +9,6 @@ import (
 // Config holds all the command-line flag values.
 type Config struct {
 	Buffer         bool
-	Clipboard      bool
 	OutputDiffFix  bool
 	Revert         bool
 	Redo           bool
@@ -23,7 +22,6 @@ func ParseFlags() (*Config, error) {
 
 	// Define flags
 	pflag.BoolVarP(&cfg.Buffer, "buffer", "b", false, "Update buffers in Neovim without saving them to disk (changes are saved by default).")
-	pflag.BoolVarP(&cfg.Clipboard, "clipboard", "c", false, "Parse content from the clipboard instead of 'itf.txt'.")
 	pflag.BoolVarP(&cfg.OutputDiffFix, "output-diff-fix", "o", false, "Print the diff that corrected start and count.")
 	pflag.StringSliceVarP(&cfg.LookupDirs, "lookup-dir", "l", []string{}, "Change directory to look for files (default: current directory).")
 	pflag.StringSliceVarP(&cfg.Extensions, "extension", "e", []string{}, "Filter by extension. Use 'diff' to process only diff blocks (e.g., 'py', 'js', 'diff').")
@@ -34,7 +32,8 @@ func ParseFlags() (*Config, error) {
 
 	pflag.Usage = func() {
 		fmt.Println("Usage: itf [flags]")
-		fmt.Println("\nParse clipboard content or 'itf.txt' to update files and load them into Neovim.")
+		fmt.Println("\nParse content from stdin (pipe) or clipboard to update files in Neovim.")
+		fmt.Println("\nExample: pbpaste | itf -e py")
 		fmt.Println("\nFlags:")
 		pflag.PrintDefaults()
 	}

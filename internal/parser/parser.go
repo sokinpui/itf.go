@@ -19,12 +19,22 @@ type ExecutionPlan struct {
 }
 
 var (
-	blockWithHintRegex = regexp.MustCompile(
+	// anyCodeBlockRegex finds any code block, with or without a preceding hint line.
+	// It's used for finding all blocks, including diffs which might not have hints.
+	anyCodeBlockRegex = regexp.MustCompile(
 		`(?m)(?:^(?P<hint_line>[^\n]*)\n(?:\s*\n)?)?` +
 			`^` + "```" + `(?P<lang>[a-z]*)\s*\n` +
 			`(?P<content>[\s\S]*?)` +
 			`^\s*` + "```" + `\s*$`)
-	pathInHintRegex = regexp.MustCompile("`([^`\\n]+)`")
+
+	// fileBlockWithHintRegex requires a non-empty hint line to exist before the code block.
+	// This is used to specifically find file blocks that are meant to be processed.
+	fileBlockWithHintRegex = regexp.MustCompile(
+		`(?m)^(?:(?P<hint_line>[^\n]+)\n(?:\s*\n)?)` +
+			`^` + "```" + `(?P<lang>[a-z]*)\s*\n` +
+			`(?P<content>[\s\S]*?)` +
+			`^\s*` + "```" + `\s*$`)
+	pathInHintRegex = regexp.MustCompile("`([^`\n]+)`")
 )
 
 // CreatePlan parses content and generates a plan of file changes.
@@ -80,12 +90,12 @@ func CreatePlan(content string, resolver *fs.PathResolver, extensions []string) 
 }
 
 func parseFileBlocks(content string, resolver *fs.PathResolver, extensions []string) []model.FileChange {
-	matches := blockWithHintRegex.FindAllStringSubmatch(content, -1)
+	matches := fileBlockWithHintRegex.FindAllStringSubmatch(content, -1)
 	var blocks []model.FileChange
 
 	for _, match := range matches {
 		result := make(map[string]string)
-		for i, name := range blockWithHintRegex.SubexpNames() {
+		for i, name := range fileBlockWithHintRegex.SubexpNames() {
 			if i != 0 && name != "" {
 				result[name] = match[i]
 			}
@@ -121,12 +131,12 @@ func parseFileBlocks(content string, resolver *fs.PathResolver, extensions []str
 
 // ExtractDiffBlocks finds all diff blocks in the content.
 func ExtractDiffBlocks(content string) []model.DiffBlock {
-	matches := blockWithHintRegex.FindAllStringSubmatch(content, -1)
+	matches := anyCodeBlockRegex.FindAllStringSubmatch(content, -1)
 	var diffs []model.DiffBlock
 
 	for _, match := range matches {
 		result := make(map[string]string)
-		for i, name := range blockWithHintRegex.SubexpNames() {
+		for i, name := range anyCodeBlockRegex.SubexpNames() {
 			if i != 0 && name != "" {
 				result[name] = match[i]
 			}
@@ -153,21 +163,14 @@ func ExtractDiffBlocks(content string) []model.DiffBlock {
 
 func extractPathFromHint(hint string) string {
 	hint = strings.TrimSpace(hint)
-	if hint == "" {
-		return ""
-	}
 
+	// A path hint must be enclosed in backticks, e.g., `path/to/file.go`
 	if match := pathInHintRegex.FindStringSubmatch(hint); len(match) > 1 {
 		path := strings.TrimSpace(match[1])
+		// Disallow spaces to avoid capturing commands like `go run main.go` as a path.
 		if !strings.Contains(path, " ") {
 			return path
 		}
-	}
-
-	cleaned := strings.TrimPrefix(hint, "#")
-	cleaned = strings.Trim(cleaned, "* ")
-	if !strings.Contains(cleaned, " ") {
-		return cleaned
 	}
 
 	return ""

@@ -3,8 +3,8 @@ golang rewrite of python [itf](https://github.com/sokinpui/itf)
 # ITF: Insert To File
 
 Tired of copying code from LLM Web interfaces.
-Too lazy to paste into multiple files.
-Don't have cash for Cursor AI.
+Too lazy to copy and paste
+Looking for free AI editor...
 
 ```
 usage: itf [-h] [-s] [-c] [-o] [-l DIR [DIR ...]] [-e EXT [EXT ...]] [-r | -R] [-f | -d | -a]

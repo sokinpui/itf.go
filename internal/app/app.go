@@ -2,6 +2,8 @@ package app
 
 import (
 	"fmt"
+	"os"
+	"path/filepath"
 	"runtime/debug"
 
 	"itf/internal/cli"
@@ -145,11 +147,13 @@ func (a *App) applyChanges(plan *parser.ExecutionPlan) (model.Summary, error) {
 		}
 	}
 
-	return model.Summary{
+	summary := model.Summary{
 		Created:  created,
 		Modified: append(diffApplied, modifiedByExt...),
 		Failed:   allFailedFiles,
-	}, nil
+	}
+	a.relativizeSummaryPaths(&summary)
+	return summary, nil
 }
 
 // fixAndPrintDiffs corrects diffs from the source and prints them to stdout.
@@ -191,11 +195,13 @@ func (a *App) revertLastOperation() (model.Summary, error) {
 
 	reverted, failed := manager.RevertFiles(ops)
 
-	return model.Summary{
+	summary := model.Summary{
 		Modified: reverted,
 		Failed:   failed,
 		Message:  "Reverted last operation.",
-	}, nil
+	}
+	a.relativizeSummaryPaths(&summary)
+	return summary, nil
 }
 
 // redoLastOperation handles the redo logic.
@@ -213,9 +219,39 @@ func (a *App) redoLastOperation() (model.Summary, error) {
 
 	redone, failed := manager.RedoFiles(ops)
 
-	return model.Summary{
+	summary := model.Summary{
 		Modified: redone,
 		Failed:   failed,
 		Message:  "Redid last reverted operation.",
-	}, nil
+	}
+	a.relativizeSummaryPaths(&summary)
+	return summary, nil
+}
+
+// relativizeSummaryPaths converts absolute file paths in a summary to be
+// relative to the current working directory for cleaner display.
+func (a *App) relativizeSummaryPaths(summary *model.Summary) {
+	wd, err := os.Getwd()
+	if err != nil {
+		// Cannot get CWD, so we can't make paths relative.
+		// Return without changing anything.
+		return
+	}
+
+	makeRelative := func(absPaths []string) []string {
+		relPaths := make([]string, len(absPaths))
+		for i, p := range absPaths {
+			rel, err := filepath.Rel(wd, p)
+			if err != nil {
+				relPaths[i] = p // Fallback to absolute path
+			} else {
+				relPaths[i] = rel
+			}
+		}
+		return relPaths
+	}
+
+	summary.Created = makeRelative(summary.Created)
+	summary.Modified = makeRelative(summary.Modified)
+	summary.Failed = makeRelative(summary.Failed)
 }

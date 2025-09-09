@@ -20,7 +20,7 @@ type ExecutionPlan struct {
 
 var (
 	// pathInHintRegex extracts a path from a hint line, e.g., `path/to/file.go`.
-	pathInHintRegex = regexp.MustCompile("`([^`\n]+)`")
+	pathInHintRegex = regexp.MustCompile("^`([^`\n]+)`")
 )
 
 // CreatePlan parses content and generates a plan of file changes.

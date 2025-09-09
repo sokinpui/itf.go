@@ -97,7 +97,7 @@ func applyPatch(filePath, patchContent string, resolver *fs.PathResolver) ([]str
 		tmpFile.Close()
 	}
 
-	cmd := exec.Command("patch", "-p1", "--no-backup-if-mismatch", "-o", "-", sourcePath)
+	cmd := exec.Command("patch", "-s", "-p1", "--no-backup-if-mismatch", "-o", "-", sourcePath)
 	cmd.Stdin = strings.NewReader(patchContent)
 
 	var out bytes.Buffer

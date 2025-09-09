@@ -12,3 +12,11 @@ type DiffBlock struct {
 	FilePath   string
 	RawContent string
 }
+
+// Summary holds the results of an operation for display.
+type Summary struct {
+	Created  []string
+	Modified []string
+	Failed   []string
+	Message  string
+}

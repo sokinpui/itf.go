@@ -3,7 +3,6 @@ package state
 import (
 	"fmt"
 	"itf/internal/fs"
-	"itf/internal/ui"
 	"os"
 	"path/filepath"
 	"sort"
@@ -45,7 +44,6 @@ func New() (*Manager, error) {
 		statePath: filepath.Join(".", stateFileName),
 	}
 	if err := m.load(); err != nil {
-		ui.Warning("Could not load state file, starting fresh: %v", err)
 		m.state = &State{CurrentIndex: -1, History: []HistoryEntry{}}
 	}
 	return m, nil
@@ -143,7 +141,7 @@ func (m *Manager) save() {
 	content := strings.Join(blocks, "\n\n")
 
 	if err := os.WriteFile(m.statePath, []byte(content), 0644); err != nil {
-		ui.Error("Failed to write state file '%s': %v", m.statePath, err)
+		// TODO: Propagate this error. For now, it fails silently.
 	}
 }
 
@@ -160,13 +158,11 @@ func (m *Manager) Write(operations []Operation) {
 	m.state.History = append(m.state.History, newEntry)
 	m.state.CurrentIndex++
 	m.save()
-	ui.Info("\nSaved run state for revertability to '%s'", stateFileName)
 }
 
 // GetOperationsToRevert gets the last operations and moves the history pointer.
 func (m *Manager) GetOperationsToRevert() []Operation {
 	if m.state.CurrentIndex < 0 {
-		ui.Error("No history found in '%s'. Nothing to revert.", stateFileName)
 		return nil
 	}
 	ops := m.state.History[m.state.CurrentIndex].Operations
@@ -179,7 +175,6 @@ func (m *Manager) GetOperationsToRevert() []Operation {
 func (m *Manager) GetOperationsToRedo() []Operation {
 	nextIndex := m.state.CurrentIndex + 1
 	if nextIndex >= len(m.state.History) {
-		ui.Error("No operations to redo. Already at the latest change.")
 		return nil
 	}
 	m.state.CurrentIndex = nextIndex
@@ -194,7 +189,7 @@ func CreateOperations(updatedFiles []string, fileActions map[string]string) []Op
 	for i, f := range updatedFiles {
 		hash, err := fs.GetFileSHA256(f)
 		if err != nil {
-			ui.Warning("Could not calculate hash for '%s', revert might not work as expected: %v", f, err)
+			// If hashing fails, the hash will be empty, revert will likely fail the check.
 		}
 		ops[i] = Operation{
 			Path:        f,

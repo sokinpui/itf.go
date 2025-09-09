@@ -3,9 +3,7 @@ package nvim
 import (
 	"fmt"
 	"itf/internal/fs"
-	"itf/internal/model"
 	"itf/internal/state"
-	"itf/internal/ui"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -13,6 +11,8 @@ import (
 	"time"
 
 	"github.com/neovim/go-client/nvim"
+
+	"itf/internal/model"
 )
 
 const undoDir = "~/.local/state/nvim/undo/"
@@ -32,13 +32,11 @@ func New() (*Manager, error) {
 	if addr := os.Getenv("NVIM_LISTEN_ADDRESS"); addr != "" {
 		v, err := nvim.Dial(addr)
 		if err == nil {
-			ui.Info("-> Connected to running Neovim instance at '%s'", addr)
 			return &Manager{nvim: v}, nil
 		}
 	}
 
 	// If that fails, start a temporary headless instance.
-	ui.Info("-> No running Neovim instance found. Starting a temporary one...")
 	tmpDir, err := os.MkdirTemp("", "itf-nvim-")
 	if err != nil {
 		return nil, fmt.Errorf("failed to create temp dir for nvim: %w", err)
@@ -71,13 +69,11 @@ func New() (*Manager, error) {
 		socketPath:    socketPath,
 	}
 	m.configureTempInstance()
-	ui.Success("-> Started temporary instance with socket '%s'", socketPath)
 	return m, nil
 }
 
 // configureTempInstance sets up undofile for persistent history.
 func (m *Manager) configureTempInstance() {
-	ui.Info("-> Configuring temporary instance for persistent undo...")
 	home, _ := os.UserHomeDir()
 	expandedUndoDir := strings.Replace(undoDir, "~", home, 1)
 	os.MkdirAll(expandedUndoDir, 0755)
@@ -87,7 +83,7 @@ func (m *Manager) configureTempInstance() {
 	b.Command(fmt.Sprintf("set undodir=%s", expandedUndoDir))
 	b.Command("set noswapfile")
 	if err := b.Execute(); err != nil {
-		ui.Warning("Failed to configure temp nvim instance: %v", err)
+		// Non-fatal error, just log it somewhere if needed in the future.
 	}
 }
 
@@ -97,37 +93,28 @@ func (m *Manager) Close() {
 		m.nvim.Close()
 	}
 	if m.isSelfStarted && m.cmd != nil && m.cmd.Process != nil {
-		ui.Info("-> Closing temporary Neovim instance...")
 		if err := m.cmd.Process.Kill(); err == nil {
 			m.cmd.Wait()
 			os.RemoveAll(filepath.Dir(m.socketPath))
-			ui.Success("-> Temporary Neovim instance terminated.")
 		}
 	}
 }
 
 // ApplyChanges updates Neovim buffers with the provided file contents.
 func (m *Manager) ApplyChanges(changes []model.FileChange) (updated, failed []string) {
-	total := len(changes)
-	bar := ui.NewProgressBar(total, "Updating buffers:")
-	bar.Start()
-
 	for _, change := range changes {
 		if m.updateBuffer(change.Path, change.Content) {
 			updated = append(updated, change.Path)
 		} else {
 			failed = append(failed, change.Path)
 		}
-		bar.Increment()
 	}
-	bar.Finish()
 	return updated, failed
 }
 
 func (m *Manager) updateBuffer(filePath string, content []string) bool {
 	absPath, err := filepath.Abs(filePath)
 	if err != nil {
-		ui.Error("\nInvalid file path '%s': %v", filePath, err)
 		return false
 	}
 
@@ -141,7 +128,6 @@ func (m *Manager) updateBuffer(filePath string, content []string) bool {
 	b.SetBufferLines(0, 0, -1, true, byteContent)
 
 	if err := b.Execute(); err != nil {
-		ui.Error("\nError processing '%s': %v", filePath, err)
 		return false
 	}
 	return true
@@ -149,27 +135,20 @@ func (m *Manager) updateBuffer(filePath string, content []string) bool {
 
 // SaveAllBuffers writes all modified buffers to disk.
 func (m *Manager) SaveAllBuffers() {
-	ui.Info("\nSaving all modified buffers...")
 	if err := m.nvim.Command("wa!"); err != nil {
-		ui.Error("Neovim API Error saving buffers: %v", err)
-	} else {
-		ui.Success("Save complete.")
+		// TODO: Propagate this error? For now, it's fire-and-forget.
 	}
 }
 
 // RevertFiles reverts a set of operations.
 func (m *Manager) RevertFiles(ops []state.Operation) (reverted, failed []string) {
-	bar := ui.NewProgressBar(len(ops), "Reverting files:")
-	bar.Start()
 	for _, op := range ops {
 		if m.revertFile(op) {
 			reverted = append(reverted, op.Path)
 		} else {
 			failed = append(failed, op.Path)
 		}
-		bar.Increment()
 	}
-	bar.Finish()
 	return reverted, failed
 }
 
@@ -177,26 +156,20 @@ func (m *Manager) revertFile(op state.Operation) bool {
 	currentHash, err := fs.GetFileSHA256(op.Path)
 	if err != nil {
 		if os.IsNotExist(err) {
-			// If the file doesn't exist, the revert is considered successful.
-			ui.Info("\nFile '%s' already deleted.", op.Path)
+			// If the file doesn't exist, the revert of a 'create' is successful.
 			return true
 		}
-		ui.Error("\nCould not read file '%s' to check for revert: %v", op.Path, err)
 		return false
 	}
 
 	// Core safety check: if the file has been changed, abort the revert for this file.
 	if currentHash != op.ContentHash {
-		ui.Warning("\nFile '%s' has been modified since the last operation.", op.Path)
-		ui.Warning("Skipping revert to prevent data loss.")
 		return false
 	}
 
 	// If hashes match, it's safe to proceed.
 	if op.Action == "create" {
-		ui.Info("\nFile '%s' is unchanged since creation. Deleting.", op.Path)
 		if err := os.Remove(op.Path); err != nil {
-			ui.Error("\nFailed to delete file '%s': %v", op.Path, err)
 			return false
 		}
 
@@ -204,7 +177,7 @@ func (m *Manager) revertFile(op state.Operation) bool {
 		parentDir := filepath.Dir(op.Path)
 		if isEmpty, _ := fs.IsEmpty(parentDir); isEmpty {
 			if err := os.Remove(parentDir); err == nil {
-				ui.Info("Removed empty parent directory '%s'.", parentDir)
+				// Successfully removed empty parent, no need to log.
 			}
 		}
 		return true
@@ -217,7 +190,6 @@ func (m *Manager) revertFile(op state.Operation) bool {
 	b.Command("undo")
 	b.Command("write")
 	if err := b.Execute(); err != nil {
-		ui.Error("\nError reverting '%s': %v", op.Path, err)
 		return false
 	}
 
@@ -226,17 +198,13 @@ func (m *Manager) revertFile(op state.Operation) bool {
 
 // RedoFiles redoes a set of operations.
 func (m *Manager) RedoFiles(ops []state.Operation) (redone, failed []string) {
-	bar := ui.NewProgressBar(len(ops), "Redoing files:")
-	bar.Start()
 	for _, op := range ops {
 		if m.redoFile(op.Path) {
 			redone = append(redone, op.Path)
 		} else {
 			failed = append(failed, op.Path)
 		}
-		bar.Increment()
 	}
-	bar.Finish()
 	return redone, failed
 }
 
@@ -247,7 +215,6 @@ func (m *Manager) redoFile(filePath string) bool {
 	b.Command("redo")
 	b.Command("write")
 	if err := b.Execute(); err != nil {
-		ui.Error("\nError redoing '%s': %v", filePath, err)
 		return false
 	}
 	return true

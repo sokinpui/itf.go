@@ -6,12 +6,12 @@ import (
 
 	"itf/internal/cli"
 	"itf/internal/fs"
+	"itf/internal/model"
 	"itf/internal/nvim"
 	"itf/internal/parser"
 	"itf/internal/patcher"
 	"itf/internal/source"
 	"itf/internal/state"
-	"itf/internal/ui"
 )
 
 // App orchestrates the entire application logic.
@@ -49,9 +49,9 @@ func New(cfg *cli.Config) (*App, error) {
 	}, nil
 }
 
-// Run executes the main application logic based on parsed flags.
-func (a *App) Run() (err error) {
-	// Centralized panic recovery to provide stack traces for unexpected errors.
+// Execute executes the main application logic based on parsed flags.
+func (a *App) Execute() (summary model.Summary, err error) {
+	// Centralized panic recovery.
 	defer func() {
 		if r := recover(); r != nil {
 			err = &DetailedError{
@@ -75,43 +75,41 @@ func (a *App) Run() (err error) {
 
 // processContent handles the core logic of parsing source, planning changes,
 // and applying them in Neovim.
-func (a *App) processContent() error {
+func (a *App) processContent() (model.Summary, error) {
 	content, err := a.sourceProvider.GetContent()
 	if err != nil {
-		return err
+		return model.Summary{}, err
 	}
 	if content == "" {
-		ui.Warning("Source is empty. Nothing to process.")
-		return nil
+		return model.Summary{Message: "Source is empty. Nothing to process."}, nil
 	}
 
 	plan, err := parser.CreatePlan(content, a.pathResolver, a.cfg.Extensions)
 	if err != nil {
-		return fmt.Errorf("failed to create execution plan: %w", err)
+		return model.Summary{}, fmt.Errorf("failed to create execution plan: %w", err)
 	}
 	if len(plan.Changes) == 0 {
-		ui.Warning("No valid changes were generated. Nothing to do.")
-		return nil
+		return model.Summary{Message: "No valid changes were generated. Nothing to do."}, nil
 	}
 
-	if ok := fs.ConfirmAndCreateDirs(plan.DirsToCreate); !ok {
-		return nil // User cancelled operation.
+	if err := fs.CreateDirs(plan.DirsToCreate); err != nil {
+		return model.Summary{}, err
 	}
 
 	return a.applyChanges(plan)
 }
 
 // applyChanges connects to Neovim and applies the planned file changes.
-func (a *App) applyChanges(plan *parser.ExecutionPlan) error {
+func (a *App) applyChanges(plan *parser.ExecutionPlan) (model.Summary, error) {
 	manager, err := nvim.New()
 	if err != nil {
-		return err
+		return model.Summary{}, err
 	}
 	defer manager.Close()
 
 	updatedFiles, failedFiles := manager.ApplyChanges(plan.Changes)
 
-	// Categorize files for a more detailed summary.
+	// Categorize files for the summary.
 	diffApplied := []string{}
 	modifiedByExt := []string{}
 	created := []string{}
@@ -135,7 +133,6 @@ func (a *App) applyChanges(plan *parser.ExecutionPlan) error {
 			}
 		}
 	}
-	ui.PrintUpdateSummary(diffApplied, modifiedByExt, created, failedFiles)
 
 	if len(updatedFiles) > 0 {
 		if !a.cfg.Buffer { // Save by default
@@ -143,81 +140,81 @@ func (a *App) applyChanges(plan *parser.ExecutionPlan) error {
 			ops := state.CreateOperations(updatedFiles, plan.FileActions)
 			a.stateManager.Write(ops)
 		} else {
-			ui.Warning("\nChanges are loaded into buffers but not saved to disk.")
-			ui.Warning("Revert will not be available for this operation.")
+			// TODO: Add this info to the summary message if needed.
 		}
 	}
-	return nil
+
+	return model.Summary{
+		Created:  created,
+		Modified: append(diffApplied, modifiedByExt...),
+		Failed:   failedFiles,
+	}, nil
 }
 
 // fixAndPrintDiffs corrects diffs from the source and prints them to stdout.
-func (a *App) fixAndPrintDiffs() error {
+func (a *App) fixAndPrintDiffs() (model.Summary, error) {
 	content, err := a.sourceProvider.GetContent()
 	if err != nil {
-		return err
+		return model.Summary{}, err
 	}
 	if content == "" {
-		return nil
+		return model.Summary{}, nil
 	}
 
 	diffs := parser.ExtractDiffBlocks(content)
 	for _, diff := range diffs {
 		corrected, err := patcher.CorrectDiff(diff, a.pathResolver, a.cfg.Extensions)
 		if err != nil {
-			ui.Warning("Skipping diff block for '%s': %v", diff.FilePath, err)
+			// Silently skip failures for this mode.
 			continue
 		}
 		if corrected != "" {
 			fmt.Print(corrected)
 		}
 	}
-	return nil
+	return model.Summary{}, nil
 }
 
 // revertLastOperation handles the undo logic.
-func (a *App) revertLastOperation() error {
+func (a *App) revertLastOperation() (model.Summary, error) {
 	ops := a.stateManager.GetOperationsToRevert()
 	if len(ops) == 0 {
-		return nil // Message already printed by state manager.
-	}
-
-	ui.Header("--- Reverting last operation ---")
-	ui.Info("Found %d file(s) to revert:", len(ops))
-	for _, op := range ops {
-		ui.Path("- %s (action: %s)", op.Path, op.Action)
+		return model.Summary{Message: "No operation to revert."}, nil
 	}
 
 	manager, err := nvim.New()
 	if err != nil {
-		return err
+		return model.Summary{}, err
 	}
 	defer manager.Close()
 
 	reverted, failed := manager.RevertFiles(ops)
-	ui.PrintRevertSummary(reverted, failed)
-	return nil
+
+	return model.Summary{
+		Modified: reverted,
+		Failed:   failed,
+		Message:  "Reverted last operation.",
+	}, nil
 }
 
 // redoLastOperation handles the redo logic.
-func (a *App) redoLastOperation() error {
+func (a *App) redoLastOperation() (model.Summary, error) {
 	ops := a.stateManager.GetOperationsToRedo()
 	if len(ops) == 0 {
-		return nil // Message already printed by state manager.
-	}
-
-	ui.Header("--- Redoing last reverted operation ---")
-	ui.Info("Found %d file(s) to redo:", len(ops))
-	for _, op := range ops {
-		ui.Path("- %s (action: %s)", op.Path, op.Action)
+		return model.Summary{Message: "No operation to redo."}, nil
 	}
 
 	manager, err := nvim.New()
 	if err != nil {
-		return err
+		return model.Summary{}, err
 	}
 	defer manager.Close()
 
 	redone, failed := manager.RedoFiles(ops)
-	ui.PrintRedoSummary(redone, failed)
-	return nil
+
+	return model.Summary{
+		Modified: redone,
+		Failed:   failed,
+		Message:  "Redid last reverted operation.",
+	}, nil
 }

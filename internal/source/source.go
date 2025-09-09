@@ -3,7 +3,6 @@ package source
 import (
 	"fmt"
 	"io"
-	"itf/internal/ui"
 	"os"
 	"strings"
 
@@ -24,7 +23,6 @@ func (sp *SourceProvider) GetContent() (string, error) {
 	isPiped := (stat.Mode() & os.ModeCharDevice) == 0
 
 	if isPiped {
-		ui.Header("--- Reading from stdin ---")
 		content, err := io.ReadAll(os.Stdin)
 		if err != nil {
 			return "", fmt.Errorf("failed to read from stdin: %w", err)
@@ -32,13 +30,11 @@ func (sp *SourceProvider) GetContent() (string, error) {
 		return string(content), nil
 	}
 
-	ui.Header("--- Reading from clipboard ---")
 	content, err := clipboard.ReadAll()
 	if err != nil {
 		return "", fmt.Errorf("failed to read from clipboard: %w", err)
 	}
 	if strings.TrimSpace(content) == "" {
-		ui.Warning("Clipboard is empty. Nothing to process.")
 		return "", nil
 	}
 	return string(content), nil

@@ -1,17 +1,12 @@
 package fs
 
 import (
-	"bufio"
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
 	"io"
 	"os"
 	"path/filepath"
-	"sort"
-	"strings"
-
-	"itf/internal/ui"
 )
 
 // GetFileSHA256 computes the SHA256 hash of a file's content.
@@ -64,7 +59,6 @@ func NewPathResolver(lookupDirs []string) *PathResolver {
 	for i, dir := range lookupDirs {
 		abs, err := filepath.Abs(dir)
 		if err != nil {
-			ui.Warning("Invalid lookup directory '%s', ignoring: %v", dir, err)
 			continue
 		}
 		absDirs[i] = abs
@@ -115,40 +109,16 @@ func GetFileActionsAndDirs(targetPaths []string) (map[string]string, map[string]
 	return fileActions, dirsToCreate
 }
 
-// ConfirmAndCreateDirs prompts the user to create directories and creates them.
-func ConfirmAndCreateDirs(dirs map[string]struct{}) bool {
+// CreateDirs creates a set of directories.
+func CreateDirs(dirs map[string]struct{}) error {
 	if len(dirs) == 0 {
-		ui.Info("\nNo new directories need to be created.")
-		return true
+		return nil
 	}
 
-	sortedDirs := make([]string, 0, len(dirs))
 	for dir := range dirs {
-		sortedDirs = append(sortedDirs, dir)
-	}
-	sort.Strings(sortedDirs)
-
-	ui.Info("\nThe following directories need to be created:")
-	for _, dir := range sortedDirs {
-		ui.Path("- %s", dir)
-	}
-
-	fmt.Print(ui.Prompt("Do you want to create all these directories? (y/N): "))
-	reader := bufio.NewReader(os.Stdin)
-	response, _ := reader.ReadString('\n')
-	if strings.TrimSpace(strings.ToLower(response)) != "y" {
-		ui.Warning("Directory creation declined. Exiting.")
-		return false
-	}
-
-	ui.Info("\nCreating directories...")
-	for _, dir := range sortedDirs {
 		if err := os.MkdirAll(dir, 0755); err != nil {
-			ui.Error("Error creating directory '%s': %v", dir, err)
-			ui.Error("Aborting due to directory creation failure.")
-			return false
+			return fmt.Errorf("error creating directory '%s': %w", dir, err)
 		}
-		ui.Success("  -> Created: %s", dir)
 	}
-	return true
+	return nil
 }

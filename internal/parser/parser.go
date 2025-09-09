@@ -5,7 +5,6 @@ import (
 	"itf/internal/fs"
 	"itf/internal/model"
 	"itf/internal/patcher"
-	"itf/internal/ui"
 	"path/filepath"
 	"regexp"
 	"strings"
@@ -39,8 +38,6 @@ func CreatePlan(content string, resolver *fs.PathResolver, extensions []string) 
 	}
 
 	diffBlocks := extractDiffBlocksFromParsed(allBlocks)
-
-	ui.Header("--- Applying changes ---")
 
 	patcherExtensions := extensions
 	if isDiffOnlyMode {
@@ -115,8 +112,7 @@ func ExtractDiffBlocks(content string) []model.DiffBlock {
 	allBlocks, err := ExtractCodeBlocks([]byte(content))
 	if err != nil {
 		// This function is also used for non-critical paths like --output-diff-fix,
-		// so we warn instead of returning an error.
-		ui.Warning("Could not parse markdown for diff blocks: %v", err)
+		// so we just return nil. The error isn't critical here.
 		return nil
 	}
 	return extractDiffBlocksFromParsed(allBlocks)
@@ -134,7 +130,7 @@ func extractDiffBlocksFromParsed(allBlocks []CodeBlock) []model.DiffBlock {
 		rawContent := strings.TrimSpace(block.Content)
 		filePath := patcher.ExtractPathFromDiff(rawContent)
 		if filePath == "" {
-			ui.Warning("Found a diff block but could not extract a file path. Skipping.")
+			// Silently skip blocks without a path.
 			continue
 		}
 

@@ -6,7 +6,9 @@ import (
 
 	application "itf/internal/app"
 	"itf/internal/cli"
-	"itf/internal/ui"
+	"itf/internal/tui"
+
+	tea "github.com/charmbracelet/bubbletea"
 )
 
 func main() {
@@ -18,18 +20,22 @@ func main() {
 
 	app, err := application.New(cfg)
 	if err != nil {
-		ui.Error("Failed to initialize application: %v", err)
+		fmt.Fprintf(os.Stderr, "Failed to initialize application: %v\n", err)
 		os.Exit(1)
 	}
 
-	if err := app.Run(); err != nil {
-		// The app.Run() method is expected to print its own errors.
-		// This is a final catch-all.
-		ui.Error("An unexpected error occurred: %v", err)
-		// Add a more detailed error for debugging if needed.
-		if e, ok := err.(*application.DetailedError); ok {
-			fmt.Fprintf(os.Stderr, "\n--- Stack Trace ---\n%s\n", e.Stack)
+	// The --output-diff-fix flag prints to stdout and should not run the TUI.
+	if cfg.OutputDiffFix {
+		if _, err := app.Execute(); err != nil {
+			fmt.Fprintf(os.Stderr, "Error fixing diffs: %v\n", err)
+			os.Exit(1)
 		}
+		return
+	}
+
+	p := tea.NewProgram(tui.New(app))
+	if _, err := p.Run(); err != nil {
+		fmt.Fprintf(os.Stderr, "Error running program: %v\n", err)
 		os.Exit(1)
 	}
 }

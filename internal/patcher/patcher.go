@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"itf/internal/fs"
 	"itf/internal/model"
-	"itf/internal/ui"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -30,7 +29,6 @@ func GeneratePatchedContents(diffs []model.DiffBlock, resolver *fs.PathResolver,
 	if len(diffs) == 0 {
 		return nil, nil
 	}
-	ui.Info("\nFound %d diff block(s) to process.", len(diffs))
 
 	var changes []model.FileChange
 	for _, diff := range diffs {
@@ -50,17 +48,16 @@ func GeneratePatchedContents(diffs []model.DiffBlock, resolver *fs.PathResolver,
 
 		patchedContent, err := CorrectDiff(diff, resolver, extensions)
 		if err != nil {
-			ui.Warning("  -> Diff correction failed for %s. Skipping: %v", diff.FilePath, err)
 			continue
 		}
 
 		appliedContent, err := applyPatch(diff.FilePath, patchedContent, resolver)
 		if err != nil {
-			ui.Error("  -> Failed to apply patch for %s: %v", diff.FilePath, err)
+			// TODO: Maybe collect these errors and show them in the summary?
+			// For now, just skip the file.
 			continue
 		}
 
-		ui.Success("  -> Successfully generated patch for: %s", diff.FilePath)
 		changes = append(changes, model.FileChange{
 			Path:    resolver.Resolve(diff.FilePath),
 			Content: appliedContent,
@@ -81,7 +78,6 @@ func CorrectDiff(diff model.DiffBlock, resolver *fs.PathResolver, extensions []s
 		}
 	}
 
-	ui.Info("  -> Correcting diff for: %s", diff.FilePath)
 	return correctDiffHunks(sourceLines, diff.RawContent, diff.FilePath)
 }
 

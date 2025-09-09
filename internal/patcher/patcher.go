@@ -25,13 +25,15 @@ func ExtractPathFromDiff(content string) string {
 }
 
 // GeneratePatchedContents corrects and applies diffs to produce final file contents.
-func GeneratePatchedContents(diffs []model.DiffBlock, resolver *fs.PathResolver, extensions []string) ([]model.FileChange, error) {
+func GeneratePatchedContents(diffs []model.DiffBlock, resolver *fs.PathResolver, extensions []string) ([]model.FileChange, []string, error) {
 	if len(diffs) == 0 {
-		return nil, nil
+		return nil, nil, nil
 	}
 
 	var changes []model.FileChange
+	var failedPaths []string
 	for _, diff := range diffs {
+		fullPath := resolver.Resolve(diff.FilePath)
 		if len(extensions) > 0 {
 			ext := filepath.Ext(diff.FilePath)
 			allowed := false
@@ -48,23 +50,23 @@ func GeneratePatchedContents(diffs []model.DiffBlock, resolver *fs.PathResolver,
 
 		patchedContent, err := CorrectDiff(diff, resolver, extensions)
 		if err != nil {
+			failedPaths = append(failedPaths, fullPath)
 			continue
 		}
 
 		appliedContent, err := applyPatch(diff.FilePath, patchedContent, resolver)
 		if err != nil {
-			// TODO: Maybe collect these errors and show them in the summary?
-			// For now, just skip the file.
+			failedPaths = append(failedPaths, fullPath)
 			continue
 		}
 
 		changes = append(changes, model.FileChange{
-			Path:    resolver.Resolve(diff.FilePath),
+			Path:    fullPath,
 			Content: appliedContent,
 			Source:  "diff",
 		})
 	}
-	return changes, nil
+	return changes, failedPaths, nil
 }
 
 // CorrectDiff prepares a valid patch from a raw diff block.

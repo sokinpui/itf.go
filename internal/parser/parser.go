@@ -15,6 +15,7 @@ type ExecutionPlan struct {
 	Changes      []model.FileChange
 	FileActions  map[string]string // Maps absolute path to "create" or "modify"
 	DirsToCreate map[string]struct{}
+	Failed       []string          // Files that failed during planning (e.g., bad patch)
 }
 
 var (
@@ -44,7 +45,7 @@ func CreatePlan(content string, resolver *fs.PathResolver, extensions []string) 
 		// In diff-only mode, don't filter patches by extension.
 		patcherExtensions = []string{}
 	}
-	patchedChanges, err := patcher.GeneratePatchedContents(diffBlocks, resolver, patcherExtensions)
+	patchedChanges, failedPatches, err := patcher.GeneratePatchedContents(diffBlocks, resolver, patcherExtensions)
 	if err != nil {
 		return nil, fmt.Errorf("failed during patch generation: %w", err)
 	}
@@ -71,6 +72,7 @@ func CreatePlan(content string, resolver *fs.PathResolver, extensions []string) 
 		Changes:      planChanges,
 		FileActions:  actions,
 		DirsToCreate: dirs,
+		Failed:       failedPatches,
 	}, nil
 }
 

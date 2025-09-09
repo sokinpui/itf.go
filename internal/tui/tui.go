@@ -17,7 +17,7 @@ var (
 	headerStyle  = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("63")) // Mauve
 	successStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("78"))  // Green
 	errorStyle   = lipgloss.NewStyle().Foreground(lipgloss.Color("197"))  // Red
-	pathStyle    = lipgloss.NewStyle().Foreground(lipgloss.Color("214"))  // Orange
+	pathStyle    = lipgloss.NewStyle()
 	faintStyle   = lipgloss.NewStyle().Faint(true)
 )
 

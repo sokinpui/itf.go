@@ -88,7 +88,7 @@ func (a *App) processContent() (model.Summary, error) {
 	if err != nil {
 		return model.Summary{}, fmt.Errorf("failed to create execution plan: %w", err)
 	}
-	if len(plan.Changes) == 0 {
+	if len(plan.Changes) == 0 && len(plan.Failed) == 0 {
 		return model.Summary{Message: "No valid changes were generated. Nothing to do."}, nil
 	}
 
@@ -107,7 +107,8 @@ func (a *App) applyChanges(plan *parser.ExecutionPlan) (model.Summary, error) {
 	}
 	defer manager.Close()
 
-	updatedFiles, failedFiles := manager.ApplyChanges(plan.Changes)
+	updatedFiles, failedFromNvim := manager.ApplyChanges(plan.Changes)
+	allFailedFiles := append(plan.Failed, failedFromNvim...)
 
 	// Categorize files for the summary.
 	diffApplied := []string{}
@@ -147,7 +148,7 @@ func (a *App) applyChanges(plan *parser.ExecutionPlan) (model.Summary, error) {
 	return model.Summary{
 		Created:  created,
 		Modified: append(diffApplied, modifiedByExt...),
-		Failed:   failedFiles,
+		Failed:   allFailedFiles,
 	}, nil
 }
 

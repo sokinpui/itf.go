@@ -91,25 +91,38 @@ func applyPatch(filePath, patchContent string, resolver *fs.PathResolver) ([]str
 		// Create a temporary empty file for patch to apply against (for new files).
 		tmpFile, err := os.CreateTemp("", "itf-source-")
 		if err != nil {
-			return nil, fmt.Errorf("failed to create temp file: %w", err)
+			return nil, fmt.Errorf("failed to create temp file for source: %w", err)
 		}
 		sourcePath = tmpFile.Name()
 		defer os.Remove(sourcePath)
 		tmpFile.Close()
 	}
 
-	cmd := exec.Command("patch", "-s", "-p1", "--no-backup-if-mismatch", "-o", "-", sourcePath)
+	// Create a temporary file for the output to avoid mixing stdout and stderr.
+	outFile, err := os.CreateTemp("", "itf-patched-")
+	if err != nil {
+		return nil, fmt.Errorf("failed to create temp file for output: %w", err)
+	}
+	outPath := outFile.Name()
+	outFile.Close()
+	defer os.Remove(outPath)
+
+	cmd := exec.Command("patch", "-s", "-p1", "--no-backup-if-mismatch", "-o", outPath, sourcePath)
 	cmd.Stdin = strings.NewReader(patchContent)
 
-	var out bytes.Buffer
 	var stderr bytes.Buffer
-	cmd.Stdout = &out
 	cmd.Stderr = &stderr
 
 	if err := cmd.Run(); err != nil {
 		return nil, fmt.Errorf("`patch` command failed: %s", stderr.String())
 	}
 
-	// Read output and split into lines, trimming a potential trailing newline from patch.
-	return strings.Split(strings.TrimSuffix(out.String(), "\n"), "\n"), nil
+	// Read the patched content from the output file.
+	patchedBytes, err := os.ReadFile(outPath)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read patched content: %w", err)
+	}
+
+	content := string(patchedBytes)
+	return strings.Split(strings.TrimSuffix(content, "\n"), "\n"), nil
 }

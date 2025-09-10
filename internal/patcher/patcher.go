@@ -10,6 +10,8 @@ import (
 	"path/filepath"
 	"regexp"
 	"strings"
+
+	"github.com/sokinpui/fix-diff-go"
 )
 
 // filePathRegex extracts the file path from a '+++ b/...' line.
@@ -72,15 +74,15 @@ func GeneratePatchedContents(diffs []model.DiffBlock, resolver *fs.PathResolver,
 // CorrectDiff prepares a valid patch from a raw diff block.
 func CorrectDiff(diff model.DiffBlock, resolver *fs.PathResolver, extensions []string) (string, error) {
 	sourcePath := resolver.ResolveExisting(diff.FilePath)
-	var sourceLines []string
+	var sourceContent string
 	if sourcePath != "" {
 		content, err := os.ReadFile(sourcePath)
 		if err == nil {
-			sourceLines = strings.Split(string(content), "\n")
+			sourceContent = string(content)
 		}
 	}
 
-	return correctDiffHunks(sourceLines, diff.RawContent, diff.FilePath)
+	return fixdiff.Fix(diff.RawContent, sourceContent)
 }
 
 func applyPatch(filePath, patchContent string, resolver *fs.PathResolver) ([]string, error) {

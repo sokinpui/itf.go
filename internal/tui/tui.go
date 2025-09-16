@@ -91,7 +91,7 @@ func (m *Model) renderSummary() string {
 	hasContent := false
 	if len(m.summary.Created) > 0 {
 		hasContent = true
-		b.WriteString(successStyle.Render("Created:"))
+		b.WriteString(successStyle.Render("  Created:"))
 		b.WriteString("\n")
 		for _, f := range m.summary.Created {
 			b.WriteString(fmt.Sprintf("  %s\n", pathStyle.Render(f)))
@@ -99,7 +99,7 @@ func (m *Model) renderSummary() string {
 	}
 	if len(m.summary.Modified) > 0 {
 		hasContent = true
-		b.WriteString(successStyle.Render("Modified:"))
+		b.WriteString(successStyle.Render("  Modified:"))
 		b.WriteString("\n")
 		for _, f := range m.summary.Modified {
 			b.WriteString(fmt.Sprintf("  %s\n", pathStyle.Render(f)))
@@ -107,7 +107,7 @@ func (m *Model) renderSummary() string {
 	}
 	if len(m.summary.Failed) > 0 {
 		hasContent = true
-		b.WriteString(errorStyle.Render("Failed:"))
+		b.WriteString(errorStyle.Render("  Failed:"))
 		b.WriteString("\n")
 		for _, f := range m.summary.Failed {
 			b.WriteString(fmt.Sprintf("  %s\n", pathStyle.Render(f)))
@@ -115,7 +115,7 @@ func (m *Model) renderSummary() string {
 	}
 
 	if !hasContent && m.summary.Message == "" {
-		b.WriteString(faintStyle.Render("Nothing to do."))
+		b.WriteString(faintStyle.Render("  Nothing to do."))
 	}
 
 	return b.String()

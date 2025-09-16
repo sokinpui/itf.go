@@ -6,14 +6,14 @@ import (
 	"path/filepath"
 	"runtime/debug"
 
-	"itf/internal/cli"
-	"itf/internal/fs"
-	"itf/internal/model"
-	"itf/internal/nvim"
-	"itf/internal/parser"
-	"itf/internal/patcher"
-	"itf/internal/source"
-	"itf/internal/state"
+	"github.com/sokinpui/itf/internal/cli"
+	"github.com/sokinpui/itf/internal/fs"
+	"github.com/sokinpui/itf/internal/model"
+	"github.com/sokinpui/itf/internal/nvim"
+	"github.com/sokinpui/itf/internal/parser"
+	"github.com/sokinpui/itf/internal/patcher"
+	"github.com/sokinpui/itf/internal/source"
+	"github.com/sokinpui/itf/internal/state"
 )
 
 // App orchestrates the entire application logic.

@@ -2,9 +2,9 @@ package parser
 
 import (
 	"fmt"
-	"itf/internal/fs"
-	"itf/internal/model"
-	"itf/internal/patcher"
+	"github.com/sokinpui/itf/internal/fs"
+	"github.com/sokinpui/itf/internal/model"
+	"github.com/sokinpui/itf/internal/patcher"
 	"path/filepath"
 	"regexp"
 	"strings"
@@ -15,7 +15,7 @@ type ExecutionPlan struct {
 	Changes      []model.FileChange
 	FileActions  map[string]string // Maps absolute path to "create" or "modify"
 	DirsToCreate map[string]struct{}
-	Failed       []string          // Files that failed during planning (e.g., bad patch)
+	Failed       []string // Files that failed during planning (e.g., bad patch)
 }
 
 var (

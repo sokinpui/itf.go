@@ -2,7 +2,7 @@ package state
 
 import (
 	"fmt"
-	"itf/internal/fs"
+	"github.com/sokinpui/itf/internal/fs"
 	"os"
 	"path/filepath"
 	"sort"

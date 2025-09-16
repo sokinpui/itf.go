@@ -2,8 +2,6 @@ package nvim
 
 import (
 	"fmt"
-	"itf/internal/fs"
-	"itf/internal/state"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -12,7 +10,9 @@ import (
 
 	"github.com/neovim/go-client/nvim"
 
-	"itf/internal/model"
+	"github.com/sokinpui/itf/internal/fs"
+	"github.com/sokinpui/itf/internal/model"
+	"github.com/sokinpui/itf/internal/state"
 )
 
 const undoDir = "~/.local/state/nvim/undo/"

@@ -1,4 +1,4 @@
-module itf
+module github.com/sokinpui/itf
 
 go 1.24.1
 

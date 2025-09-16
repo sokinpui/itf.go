@@ -2,21 +2,20 @@ package tui
 
 import (
 	"fmt"
-	"itf/internal/app"
-	"itf/internal/model"
 	"os"
 	"strings"
 
-	"github.com/charmbracelet/bubbles/spinner"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
+	"github.com/sokinpui/itf/internal/app"
+	"github.com/sokinpui/itf/internal/model"
 )
 
 // --- Styles ---
 var (
 	headerStyle  = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("63")) // Mauve
-	successStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("78"))  // Green
-	errorStyle   = lipgloss.NewStyle().Foreground(lipgloss.Color("197"))  // Red
+	successStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("78"))            // Green
+	errorStyle   = lipgloss.NewStyle().Foreground(lipgloss.Color("197"))           // Red
 	pathStyle    = lipgloss.NewStyle()
 	faintStyle   = lipgloss.NewStyle().Faint(true)
 )
@@ -33,33 +32,19 @@ func (e errorMsg) Error() string { return e.err.Error() }
 // --- Model ---
 type Model struct {
 	app     *app.App
-	spinner spinner.Model
-	state   state
-	summary summaryMsg
+	summary model.Summary
 	err     error
+	done    bool
 }
 
-type state int
-
-const (
-	stateProcessing state = iota
-	stateSummary
-	stateError
-)
-
 func New(app *app.App) Model {
-	s := spinner.New()
-	s.Spinner = spinner.Dot
-	s.Style = lipgloss.NewStyle().Foreground(lipgloss.Color("205"))
 	return Model{
-		app:     app,
-		spinner: s,
-		state:   stateProcessing,
+		app: app,
 	}
 }
 
 func (m Model) Init() tea.Cmd {
-	return tea.Batch(m.spinner.Tick, m.runApp)
+	return m.runApp
 }
 
 func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
@@ -71,36 +56,28 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 
 	case summaryMsg:
-		m.state = stateSummary
-		m.summary = msg
+		m.summary = msg.Summary
+		m.done = true
 		return m, tea.Quit
 
 	case errorMsg:
-		m.state = stateError
 		m.err = msg
+		m.done = true
 		return m, tea.Quit
-
-	default:
-		var cmd tea.Cmd
-		if m.state == stateProcessing {
-			m.spinner, cmd = m.spinner.Update(msg)
-		}
-		return m, cmd
 	}
 	return m, nil
 }
 
 func (m Model) View() string {
-	switch m.state {
-	case stateProcessing:
-		return fmt.Sprintf("%s Processing...", m.spinner.View())
-	case stateError:
-		return errorStyle.Render("Error: ", m.err.Error())
-	case stateSummary:
-		return m.renderSummary()
-	default:
+	if !m.done {
 		return ""
 	}
+
+	if m.err != nil {
+		return errorStyle.Render("Error: ", m.err.Error())
+	}
+
+	return m.renderSummary()
 }
 
 func (m *Model) renderSummary() string {

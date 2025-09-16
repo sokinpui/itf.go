@@ -3,8 +3,8 @@ package patcher
 import (
 	"bytes"
 	"fmt"
-	"itf/internal/fs"
-	"itf/internal/model"
+	"github.com/sokinpui/itf/internal/fs"
+	"github.com/sokinpui/itf/internal/model"
 	"os"
 	"os/exec"
 	"path/filepath"

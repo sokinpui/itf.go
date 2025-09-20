@@ -3,15 +3,14 @@ package patcher
 import (
 	"bytes"
 	"fmt"
-	"github.com/sokinpui/itf/internal/fs"
-	"github.com/sokinpui/itf/internal/model"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"regexp"
 	"strings"
 
-	"github.com/sokinpui/fix-diff-go"
+	"github.com/sokinpui/itf/internal/fs"
+	"github.com/sokinpui/itf/internal/model"
 )
 
 // filePathRegex extracts the file path from a '+++ b/...' line.
@@ -74,15 +73,15 @@ func GeneratePatchedContents(diffs []model.DiffBlock, resolver *fs.PathResolver,
 // CorrectDiff prepares a valid patch from a raw diff block.
 func CorrectDiff(diff model.DiffBlock, resolver *fs.PathResolver, extensions []string) (string, error) {
 	sourcePath := resolver.ResolveExisting(diff.FilePath)
-	var sourceContent string
+	var sourceLines []string
 	if sourcePath != "" {
 		content, err := os.ReadFile(sourcePath)
 		if err == nil {
-			sourceContent = string(content)
+			sourceLines = strings.Split(string(content), "\n")
 		}
 	}
 
-	return fixdiff.Fix(diff.RawContent, sourceContent)
+	return correctDiffHunks(sourceLines, diff.RawContent, diff.FilePath)
 }
 
 func applyPatch(filePath, patchContent string, resolver *fs.PathResolver) ([]string, error) {
@@ -91,38 +90,25 @@ func applyPatch(filePath, patchContent string, resolver *fs.PathResolver) ([]str
 		// Create a temporary empty file for patch to apply against (for new files).
 		tmpFile, err := os.CreateTemp("", "itf-source-")
 		if err != nil {
-			return nil, fmt.Errorf("failed to create temp file for source: %w", err)
+			return nil, fmt.Errorf("failed to create temp file: %w", err)
 		}
 		sourcePath = tmpFile.Name()
 		defer os.Remove(sourcePath)
 		tmpFile.Close()
 	}
 
-	// Create a temporary file for the output to avoid mixing stdout and stderr.
-	outFile, err := os.CreateTemp("", "itf-patched-")
-	if err != nil {
-		return nil, fmt.Errorf("failed to create temp file for output: %w", err)
-	}
-	outPath := outFile.Name()
-	outFile.Close()
-	defer os.Remove(outPath)
-
-	cmd := exec.Command("patch", "-s", "-p1", "--no-backup-if-mismatch", "-o", outPath, sourcePath)
+	cmd := exec.Command("patch", "-s", "-p1", "--no-backup-if-mismatch", "-o", "-", sourcePath)
 	cmd.Stdin = strings.NewReader(patchContent)
 
+	var out bytes.Buffer
 	var stderr bytes.Buffer
+	cmd.Stdout = &out
 	cmd.Stderr = &stderr
 
 	if err := cmd.Run(); err != nil {
 		return nil, fmt.Errorf("`patch` command failed: %s", stderr.String())
 	}
 
-	// Read the patched content from the output file.
-	patchedBytes, err := os.ReadFile(outPath)
-	if err != nil {
-		return nil, fmt.Errorf("failed to read patched content: %w", err)
-	}
-
-	content := string(patchedBytes)
-	return strings.Split(strings.TrimSuffix(content, "\n"), "\n"), nil
+	// Read output and split into lines, trimming a potential trailing newline from patch.
+	return strings.Split(strings.TrimSuffix(out.String(), "\n"), "\n"), nil
 }

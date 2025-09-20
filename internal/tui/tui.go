@@ -14,6 +14,7 @@ import (
 // --- Styles ---
 var (
 	headerStyle  = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("63")) // Mauve
+	createdStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("81"))            // Cyan
 	successStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("78"))            // Green
 	errorStyle   = lipgloss.NewStyle().Foreground(lipgloss.Color("197"))           // Red
 	pathStyle    = lipgloss.NewStyle()
@@ -91,7 +92,7 @@ func (m *Model) renderSummary() string {
 	hasContent := false
 	if len(m.summary.Created) > 0 {
 		hasContent = true
-		b.WriteString(successStyle.Render("Created:"))
+		b.WriteString(createdStyle.Render("Created:"))
 		b.WriteString("\n")
 		for _, f := range m.summary.Created {
 			b.WriteString(fmt.Sprintf("  %s\n", pathStyle.Render(f)))

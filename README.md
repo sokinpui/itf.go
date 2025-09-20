@@ -20,10 +20,25 @@ Flags:
   -e, --extension strings    Filter by extension. Use 'diff' to process only diff blocks (e.g., 'py', 'js', 'diff').
   -l, --lookup-dir strings   Change directory to look for files (default: current directory).
   -o, --output-diff-fix      Print the diff that corrected start and count.
-  -R, --redo                 Redo the last reverted operation.
-  -r, --revert               Revert the last operation.
+  -r, --redo                 Redo the last undone operation.
+  -u, --undo                 Undo the last operation.
+```
+
+# Installatoin
 
 ```
+go install github.com/sokinpui/itf.go@latest
+```
+
+locally:
+
+```
+git clone https://github.com/sokinpui/itf.go
+cd itf.go
+git install ./cmd/itf
+```
+
+# Format
 
 ## Content file block:
 

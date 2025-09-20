@@ -160,8 +160,8 @@ func (m *Manager) Write(operations []Operation) {
 	m.save()
 }
 
-// GetOperationsToRevert gets the last operations and moves the history pointer.
-func (m *Manager) GetOperationsToRevert() []Operation {
+// GetOperationsToUndo gets the last operations and moves the history pointer.
+func (m *Manager) GetOperationsToUndo() []Operation {
 	if m.state.CurrentIndex < 0 {
 		return nil
 	}

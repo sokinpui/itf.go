@@ -140,29 +140,29 @@ func (m *Manager) SaveAllBuffers() {
 	}
 }
 
-// RevertFiles reverts a set of operations.
-func (m *Manager) RevertFiles(ops []state.Operation) (reverted, failed []string) {
+// UndoFiles reverts a set of operations.
+func (m *Manager) UndoFiles(ops []state.Operation) (undone, failed []string) {
 	for _, op := range ops {
-		if m.revertFile(op) {
-			reverted = append(reverted, op.Path)
+		if m.undoFile(op) {
+			undone = append(undone, op.Path)
 		} else {
 			failed = append(failed, op.Path)
 		}
 	}
-	return reverted, failed
+	return undone, failed
 }
 
-func (m *Manager) revertFile(op state.Operation) bool {
+func (m *Manager) undoFile(op state.Operation) bool {
 	currentHash, err := fs.GetFileSHA256(op.Path)
 	if err != nil {
 		if os.IsNotExist(err) {
-			// If the file doesn't exist, the revert of a 'create' is successful.
+			// If the file doesn't exist, the undo of a 'create' is successful.
 			return true
 		}
 		return false
 	}
 
-	// Core safety check: if the file has been changed, abort the revert for this file.
+	// Core safety check: if the file has been changed, abort the undo for this file.
 	if currentHash != op.ContentHash {
 		return false
 	}

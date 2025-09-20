@@ -10,7 +10,7 @@ import (
 type Config struct {
 	Buffer         bool
 	OutputDiffFix  bool
-	Revert         bool
+	Undo           bool
 	Redo           bool
 	LookupDirs     []string
 	Extensions     []string
@@ -27,8 +27,8 @@ func ParseFlags() (*Config, error) {
 	pflag.StringSliceVarP(&cfg.Extensions, "extension", "e", []string{}, "Filter by extension. Use 'diff' to process only diff blocks (e.g., 'py', 'js', 'diff').")
 
 	// Mutually exclusive history group
-	pflag.BoolVarP(&cfg.Revert, "revert", "r", false, "Revert the last operation.")
-	pflag.BoolVarP(&cfg.Redo, "redo", "R", false, "Redo the last reverted operation.")
+	pflag.BoolVarP(&cfg.Undo, "undo", "u", false, "Undo the last operation.")
+	pflag.BoolVarP(&cfg.Redo, "redo", "r", false, "Redo the last undone operation.")
 
 	pflag.Usage = func() {
 		fmt.Println("Usage: itf [flags]")
@@ -41,8 +41,8 @@ func ParseFlags() (*Config, error) {
 	pflag.Parse()
 
 	// Validate mutually exclusive flags
-	if cfg.Revert && cfg.Redo {
-		return nil, fmt.Errorf("error: --revert and --redo are mutually exclusive")
+	if cfg.Undo && cfg.Redo {
+		return nil, fmt.Errorf("error: --undo and --redo are mutually exclusive")
 	}
 
 	// Normalize extensions

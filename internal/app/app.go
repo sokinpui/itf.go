@@ -64,8 +64,8 @@ func (a *App) Execute() (summary model.Summary, err error) {
 	}()
 
 	switch {
-	case a.cfg.Revert:
-		return a.revertLastOperation()
+	case a.cfg.Undo:
+		return a.undoLastOperation()
 	case a.cfg.Redo:
 		return a.redoLastOperation()
 	case a.cfg.OutputDiffFix:
@@ -180,11 +180,11 @@ func (a *App) fixAndPrintDiffs() (model.Summary, error) {
 	return model.Summary{}, nil
 }
 
-// revertLastOperation handles the undo logic.
-func (a *App) revertLastOperation() (model.Summary, error) {
-	ops := a.stateManager.GetOperationsToRevert()
+// undoLastOperation handles the undo logic.
+func (a *App) undoLastOperation() (model.Summary, error) {
+	ops := a.stateManager.GetOperationsToUndo()
 	if len(ops) == 0 {
-		return model.Summary{Message: "No operation to revert."}, nil
+		return model.Summary{Message: "No operation to undo."}, nil
 	}
 
 	manager, err := nvim.New()
@@ -193,12 +193,12 @@ func (a *App) revertLastOperation() (model.Summary, error) {
 	}
 	defer manager.Close()
 
-	reverted, failed := manager.RevertFiles(ops)
+	undone, failed := manager.UndoFiles(ops)
 
 	summary := model.Summary{
-		Modified: reverted,
+		Modified: undone,
 		Failed:   failed,
-		Message:  "Reverted last operation.",
+		Message:  "Undid last operation.",
 	}
 	a.relativizeSummaryPaths(&summary)
 	return summary, nil
@@ -222,7 +222,7 @@ func (a *App) redoLastOperation() (model.Summary, error) {
 	summary := model.Summary{
 		Modified: redone,
 		Failed:   failed,
-		Message:  "Redid last reverted operation.",
+		Message:  "Redid last undone operation.",
 	}
 	a.relativizeSummaryPaths(&summary)
 	return summary, nil

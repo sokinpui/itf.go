@@ -2,9 +2,9 @@ package parser
 
 import (
 	"fmt"
-	"github.com/sokinpui/itf/internal/fs"
-	"github.com/sokinpui/itf/internal/model"
-	"github.com/sokinpui/itf/internal/patcher"
+	"github.com/sokinpui/itf.go/internal/fs"
+	"github.com/sokinpui/itf.go/internal/model"
+	"github.com/sokinpui/itf.go/internal/patcher"
 	"path/filepath"
 	"regexp"
 	"strings"

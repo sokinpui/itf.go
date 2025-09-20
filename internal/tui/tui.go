@@ -7,8 +7,8 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
-	"github.com/sokinpui/itf/internal/app"
-	"github.com/sokinpui/itf/internal/model"
+	"github.com/sokinpui/itf.go/internal/app"
+	"github.com/sokinpui/itf.go/internal/model"
 )
 
 // --- Styles ---

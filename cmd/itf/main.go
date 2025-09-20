@@ -4,9 +4,9 @@ import (
 	"fmt"
 	"os"
 
-	application "github.com/sokinpui/itf/internal/app"
-	"github.com/sokinpui/itf/internal/cli"
-	"github.com/sokinpui/itf/internal/tui"
+	application "github.com/sokinpui/itf.go/internal/app"
+	"github.com/sokinpui/itf.go/internal/cli"
+	"github.com/sokinpui/itf.go/internal/tui"
 
 	tea "github.com/charmbracelet/bubbletea"
 )

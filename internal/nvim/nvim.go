@@ -10,9 +10,9 @@ import (
 
 	"github.com/neovim/go-client/nvim"
 
-	"github.com/sokinpui/itf/internal/fs"
-	"github.com/sokinpui/itf/internal/model"
-	"github.com/sokinpui/itf/internal/state"
+	"github.com/sokinpui/itf.go/internal/fs"
+	"github.com/sokinpui/itf.go/internal/model"
+	"github.com/sokinpui/itf.go/internal/state"
 )
 
 const undoDir = "~/.local/state/nvim/undo/"

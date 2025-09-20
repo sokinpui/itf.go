@@ -1,4 +1,4 @@
-golang rewrite of python [itf](https://github.com/sokinpui/itf)
+Golang rewrite of python [itf](https://github.com/sokinpui/itf)
 
 # ITF: Insert To File
 

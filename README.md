@@ -27,7 +27,7 @@ Flags:
 # Installatoin
 
 ```
-go install github.com/sokinpui/itf.go/cmd/itf@latest
+go install github.com/sokinpui/itf.go/cmd/itf@v1.0.1
 ```
 
 locally:

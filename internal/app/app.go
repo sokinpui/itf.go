@@ -16,12 +16,16 @@ import (
 	"github.com/sokinpui/itf.go/internal/state"
 )
 
+// ProgressUpdate is a callback function to report progress.
+type ProgressUpdate func(current, total int)
+
 // App orchestrates the entire application logic.
 type App struct {
-	cfg            *cli.Config
-	stateManager   *state.Manager
-	pathResolver   *fs.PathResolver
-	sourceProvider *source.SourceProvider
+	cfg              *cli.Config
+	stateManager     *state.Manager
+	pathResolver     *fs.PathResolver
+	sourceProvider   *source.SourceProvider
+	progressCallback ProgressUpdate
 }
 
 // DetailedError enhances a standard error with a stack trace.
@@ -49,6 +53,11 @@ func New(cfg *cli.Config) (*App, error) {
 		pathResolver:   pathResolver,
 		sourceProvider: sourceProvider,
 	}, nil
+}
+
+// SetProgressCallback sets a function to be called for progress updates.
+func (a *App) SetProgressCallback(cb ProgressUpdate) {
+	a.progressCallback = cb
 }
 
 // Execute executes the main application logic based on parsed flags.
@@ -109,7 +118,16 @@ func (a *App) applyChanges(plan *parser.ExecutionPlan) (model.Summary, error) {
 	}
 	defer manager.Close()
 
-	updatedFiles, failedFromNvim := manager.ApplyChanges(plan.Changes)
+	total := len(plan.Changes)
+	var nvimProgressCb func(int)
+	if a.progressCallback != nil {
+		a.progressCallback(0, total)
+		nvimProgressCb = func(current int) {
+			a.progressCallback(current, total)
+		}
+	}
+
+	updatedFiles, failedFromNvim := manager.ApplyChanges(plan.Changes, nvimProgressCb)
 	allFailedFiles := append(plan.Failed, failedFromNvim...)
 
 	// Categorize files for the summary.
@@ -193,7 +211,16 @@ func (a *App) undoLastOperation() (model.Summary, error) {
 	}
 	defer manager.Close()
 
-	undone, failed := manager.UndoFiles(ops)
+	total := len(ops)
+	var nvimProgressCb func(int)
+	if a.progressCallback != nil {
+		a.progressCallback(0, total)
+		nvimProgressCb = func(current int) {
+			a.progressCallback(current, total)
+		}
+	}
+
+	undone, failed := manager.UndoFiles(ops, nvimProgressCb)
 
 	summary := model.Summary{
 		Modified: undone,
@@ -217,7 +244,16 @@ func (a *App) redoLastOperation() (model.Summary, error) {
 	}
 	defer manager.Close()
 
-	redone, failed := manager.RedoFiles(ops)
+	total := len(ops)
+	var nvimProgressCb func(int)
+	if a.progressCallback != nil {
+		a.progressCallback(0, total)
+		nvimProgressCb = func(current int) {
+			a.progressCallback(current, total)
+		}
+	}
+
+	redone, failed := manager.RedoFiles(ops, nvimProgressCb)
 
 	summary := model.Summary{
 		Modified: redone,

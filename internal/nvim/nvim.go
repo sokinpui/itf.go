@@ -101,12 +101,15 @@ func (m *Manager) Close() {
 }
 
 // ApplyChanges updates Neovim buffers with the provided file contents.
-func (m *Manager) ApplyChanges(changes []model.FileChange) (updated, failed []string) {
-	for _, change := range changes {
+func (m *Manager) ApplyChanges(changes []model.FileChange, progressCb func(int)) (updated, failed []string) {
+	for i, change := range changes {
 		if m.updateBuffer(change.Path, change.Content) {
 			updated = append(updated, change.Path)
 		} else {
 			failed = append(failed, change.Path)
+		}
+		if progressCb != nil {
+			progressCb(i + 1)
 		}
 	}
 	return updated, failed
@@ -141,12 +144,15 @@ func (m *Manager) SaveAllBuffers() {
 }
 
 // UndoFiles reverts a set of operations.
-func (m *Manager) UndoFiles(ops []state.Operation) (undone, failed []string) {
-	for _, op := range ops {
+func (m *Manager) UndoFiles(ops []state.Operation, progressCb func(int)) (undone, failed []string) {
+	for i, op := range ops {
 		if m.undoFile(op) {
 			undone = append(undone, op.Path)
 		} else {
 			failed = append(failed, op.Path)
+		}
+		if progressCb != nil {
+			progressCb(i + 1)
 		}
 	}
 	return undone, failed
@@ -197,12 +203,15 @@ func (m *Manager) undoFile(op state.Operation) bool {
 }
 
 // RedoFiles redoes a set of operations.
-func (m *Manager) RedoFiles(ops []state.Operation) (redone, failed []string) {
-	for _, op := range ops {
+func (m *Manager) RedoFiles(ops []state.Operation, progressCb func(int)) (redone, failed []string) {
+	for i, op := range ops {
 		if m.redoFile(op.Path) {
 			redone = append(redone, op.Path)
 		} else {
 			failed = append(failed, op.Path)
+		}
+		if progressCb != nil {
+			progressCb(i + 1)
 		}
 	}
 	return redone, failed

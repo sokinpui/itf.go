@@ -3,6 +3,7 @@ package tui
 import (
 	"fmt"
 	"os"
+	"time"
 	"strings"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -21,6 +22,26 @@ var (
 	faintStyle   = lipgloss.NewStyle().Faint(true)
 )
 
+// --- Spinner ---
+type spinner struct {
+	frames []string
+	index  int
+}
+
+func newSpinner() spinner {
+	return spinner{
+		frames: []string{"⣾", "⣽", "⣻", "⢿", "⡿", "⣟", "⣯", "⣷"},
+	}
+}
+
+func (s *spinner) tick() {
+	s.index = (s.index + 1) % len(s.frames)
+}
+
+func (s spinner) View() string {
+	return s.frames[s.index]
+}
+
 // --- Messages ---
 type summaryMsg struct {
 	model.Summary
@@ -30,25 +51,47 @@ type errorMsg struct{ err error }
 
 func (e errorMsg) Error() string { return e.err.Error() }
 
-// --- Model ---
-type Model struct {
-	app     *app.App
-	summary model.Summary
-	err     error
-	done    bool
+type tickMsg time.Time
+
+type progressMsg struct {
+	current int
+	total   int
 }
 
-func New(app *app.App) Model {
-	return Model{
-		app: app,
+// --- Model ---
+type Model struct {
+	app             *app.App
+	summary         model.Summary
+	err             error
+	done            bool
+	spinner         spinner
+	progressCurrent int
+	progressTotal   int
+	program         *tea.Program
+}
+
+func New(app *app.App) *Model {
+	return &Model{
+		app:     app,
+		spinner: newSpinner(),
 	}
 }
 
-func (m Model) Init() tea.Cmd {
-	return m.runApp
+func (m *Model) SetProgram(p *tea.Program) {
+	m.program = p
 }
 
-func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+func (m *Model) Init() tea.Cmd {
+	return tea.Batch(m.runApp, m.spinnerTick())
+}
+
+func (m *Model) spinnerTick() tea.Cmd {
+	return tea.Tick(100*time.Millisecond, func(t time.Time) tea.Msg {
+		return tickMsg(t)
+	})
+}
+
+func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.KeyMsg:
 		switch msg.String() {
@@ -65,17 +108,36 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.err = msg
 		m.done = true
 		return m, tea.Quit
+
+	case tickMsg:
+		if !m.done {
+			m.spinner.tick()
+			return m, m.spinnerTick()
+		}
+		return m, nil
+
+	case progressMsg:
+		m.progressCurrent = msg.current
+		m.progressTotal = msg.total
+		return m, nil
 	}
 	return m, nil
 }
 
-func (m Model) View() string {
-	if !m.done {
-		return ""
-	}
-
+func (m *Model) View() string {
 	if m.err != nil {
 		return errorStyle.Render("Error: ", m.err.Error())
+	}
+
+	if !m.done {
+		var b strings.Builder
+		b.WriteString(fmt.Sprintf("%s Processing files...\n", m.spinner.View()))
+		if m.progressTotal > 0 {
+			b.WriteString(fmt.Sprintf("  %d / %d", m.progressCurrent, m.progressTotal))
+		} else {
+			b.WriteString("  Initializing...")
+		}
+		return b.String()
 	}
 
 	return m.renderSummary()
@@ -123,6 +185,12 @@ func (m *Model) renderSummary() string {
 }
 
 func (m *Model) runApp() tea.Msg {
+	if m.program != nil {
+		m.app.SetProgressCallback(func(current, total int) {
+			m.program.Send(progressMsg{current: current, total: total})
+		})
+	}
+
 	summary, err := m.app.Execute()
 	if err != nil {
 		// Check for detailed error to print stack

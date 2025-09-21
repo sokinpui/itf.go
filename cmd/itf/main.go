@@ -33,7 +33,9 @@ func main() {
 		return
 	}
 
-	p := tea.NewProgram(tui.New(app))
+	model := tui.New(app)
+	p := tea.NewProgram(model)
+	model.SetProgram(p)
 	if _, err := p.Run(); err != nil {
 		fmt.Fprintf(os.Stderr, "Error running program: %v\n", err)
 		os.Exit(1)

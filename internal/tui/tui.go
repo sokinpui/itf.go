@@ -9,6 +9,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/sokinpui/itf.go/internal/app"
+	"github.com/sokinpui/itf.go/internal/cli"
 	"github.com/sokinpui/itf.go/internal/model"
 )
 
@@ -68,12 +69,14 @@ type Model struct {
 	progressCurrent int
 	progressTotal   int
 	program         *tea.Program
+	noAnimation     bool
 }
 
-func New(app *app.App) *Model {
+func New(app *app.App, cfg *cli.Config) *Model {
 	return &Model{
-		app:     app,
-		spinner: newSpinner(),
+		app:         app,
+		spinner:     newSpinner(),
+		noAnimation: cfg.NoAnimation,
 	}
 }
 
@@ -82,6 +85,9 @@ func (m *Model) SetProgram(p *tea.Program) {
 }
 
 func (m *Model) Init() tea.Cmd {
+	if m.noAnimation {
+		return m.runApp
+	}
 	return tea.Batch(m.runApp, m.spinnerTick())
 }
 
@@ -110,7 +116,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, tea.Quit
 
 	case tickMsg:
-		if !m.done {
+		if !m.done && !m.noAnimation {
 			m.spinner.tick()
 			return m, m.spinnerTick()
 		}
@@ -130,6 +136,10 @@ func (m *Model) View() string {
 	}
 
 	if !m.done {
+		if m.noAnimation {
+			return ""
+		}
+
 		var b strings.Builder
 		b.WriteString(fmt.Sprintf("%s Processing files...\n", m.spinner.View()))
 		if m.progressTotal > 0 {
@@ -185,7 +195,7 @@ func (m *Model) renderSummary() string {
 }
 
 func (m *Model) runApp() tea.Msg {
-	if m.program != nil {
+	if m.program != nil && !m.noAnimation {
 		m.app.SetProgressCallback(func(current, total int) {
 			m.program.Send(progressMsg{current: current, total: total})
 		})

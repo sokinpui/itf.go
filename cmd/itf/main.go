@@ -33,7 +33,7 @@ func main() {
 		return
 	}
 
-	model := tui.New(app)
+	model := tui.New(app, cfg)
 	p := tea.NewProgram(model)
 	model.SetProgram(p)
 	if _, err := p.Run(); err != nil {

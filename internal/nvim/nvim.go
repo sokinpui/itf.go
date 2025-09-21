@@ -103,40 +103,45 @@ func (m *Manager) Close() {
 	}
 }
 
-// ApplyChanges updates Neovim buffers with the provided file contents.
-func (m *Manager) ApplyChanges(changes []model.FileChange, progressCb func(int)) (updated, failed []string) {
-	numChanges := len(changes)
-	if numChanges == 0 {
+// processConcurrently is a generic helper function to run a set of jobs in parallel.
+func processConcurrently[T any](
+	items []T,
+	processFn func(item T) (path string, success bool),
+	progressCb func(int),
+) (succeeded, failed []string) {
+	numItems := len(items)
+	if numItems == 0 {
 		return nil, nil
 	}
 
 	var wg sync.WaitGroup
-	var updatedMutex, failedMutex sync.Mutex
+	var succeededMutex, failedMutex sync.Mutex
 	var progressCounter int32
 
-	jobs := make(chan model.FileChange, numChanges)
-	for _, change := range changes {
-		jobs <- change
+	jobs := make(chan T, numItems)
+	for _, item := range items {
+		jobs <- item
 	}
 	close(jobs)
 
 	numWorkers := runtime.NumCPU()
-	if numChanges < numWorkers {
-		numWorkers = numChanges
+	if numItems < numWorkers {
+		numWorkers = numItems
 	}
 
 	for i := 0; i < numWorkers; i++ {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			for change := range jobs {
-				if m.updateBuffer(change.Path, change.Content) {
-					updatedMutex.Lock()
-					updated = append(updated, change.Path)
-					updatedMutex.Unlock()
+			for item := range jobs {
+				path, success := processFn(item)
+				if success {
+					succeededMutex.Lock()
+					succeeded = append(succeeded, path)
+					succeededMutex.Unlock()
 				} else {
 					failedMutex.Lock()
-					failed = append(failed, change.Path)
+					failed = append(failed, path)
 					failedMutex.Unlock()
 				}
 				if progressCb != nil {
@@ -148,7 +153,15 @@ func (m *Manager) ApplyChanges(changes []model.FileChange, progressCb func(int))
 	}
 
 	wg.Wait()
-	return updated, failed
+	return succeeded, failed
+}
+
+// ApplyChanges updates Neovim buffers with the provided file contents.
+func (m *Manager) ApplyChanges(changes []model.FileChange, progressCb func(int)) (updated, failed []string) {
+	processFn := func(change model.FileChange) (string, bool) {
+		return change.Path, m.updateBuffer(change.Path, change.Content)
+	}
+	return processConcurrently(changes, processFn, progressCb)
 }
 
 func (m *Manager) updateBuffer(filePath string, content []string) bool {
@@ -181,50 +194,10 @@ func (m *Manager) SaveAllBuffers() {
 
 // UndoFiles reverts a set of operations.
 func (m *Manager) UndoFiles(ops []state.Operation, progressCb func(int)) (undone, failed []string) {
-	numOps := len(ops)
-	if numOps == 0 {
-		return nil, nil
+	processFn := func(op state.Operation) (string, bool) {
+		return op.Path, m.undoFile(op)
 	}
-
-	var wg sync.WaitGroup
-	var undoneMutex, failedMutex sync.Mutex
-	var progressCounter int32
-
-	jobs := make(chan state.Operation, numOps)
-	for _, op := range ops {
-		jobs <- op
-	}
-	close(jobs)
-
-	numWorkers := runtime.NumCPU()
-	if numOps < numWorkers {
-		numWorkers = numOps
-	}
-
-	for i := 0; i < numWorkers; i++ {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
-			for op := range jobs {
-				if m.undoFile(op) {
-					undoneMutex.Lock()
-					undone = append(undone, op.Path)
-					undoneMutex.Unlock()
-				} else {
-					failedMutex.Lock()
-					failed = append(failed, op.Path)
-					failedMutex.Unlock()
-				}
-				if progressCb != nil {
-					current := atomic.AddInt32(&progressCounter, 1)
-					progressCb(int(current))
-				}
-			}
-		}()
-	}
-
-	wg.Wait()
-	return undone, failed
+	return processConcurrently(ops, processFn, progressCb)
 }
 
 func (m *Manager) undoFile(op state.Operation) bool {
@@ -273,50 +246,10 @@ func (m *Manager) undoFile(op state.Operation) bool {
 
 // RedoFiles redoes a set of operations.
 func (m *Manager) RedoFiles(ops []state.Operation, progressCb func(int)) (redone, failed []string) {
-	numOps := len(ops)
-	if numOps == 0 {
-		return nil, nil
+	processFn := func(op state.Operation) (string, bool) {
+		return op.Path, m.redoFile(op.Path)
 	}
-
-	var wg sync.WaitGroup
-	var redoneMutex, failedMutex sync.Mutex
-	var progressCounter int32
-
-	jobs := make(chan state.Operation, numOps)
-	for _, op := range ops {
-		jobs <- op
-	}
-	close(jobs)
-
-	numWorkers := runtime.NumCPU()
-	if numOps < numWorkers {
-		numWorkers = numOps
-	}
-
-	for i := 0; i < numWorkers; i++ {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
-			for op := range jobs {
-				if m.redoFile(op.Path) {
-					redoneMutex.Lock()
-					redone = append(redone, op.Path)
-					redoneMutex.Unlock()
-				} else {
-					failedMutex.Lock()
-					failed = append(failed, op.Path)
-					failedMutex.Unlock()
-				}
-				if progressCb != nil {
-					current := atomic.AddInt32(&progressCounter, 1)
-					progressCb(int(current))
-				}
-			}
-		}()
-	}
-
-	wg.Wait()
-	return redone, failed
+	return processConcurrently(ops, processFn, progressCb)
 }
 
 func (m *Manager) redoFile(filePath string) bool {

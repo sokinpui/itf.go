@@ -18,7 +18,10 @@ import (
 	"github.com/sokinpui/itf.go/internal/state"
 )
 
-const undoDir = "~/.local/state/nvim/undo/"
+const (
+	undoDir    = "~/.local/state/nvim/undo/"
+	maxWorkers = 16 // Suitable for I/O-bound tasks like IPC with Neovim.
+)
 
 // Manager handles the connection and interaction with a Neovim instance.
 type Manager struct {
@@ -124,7 +127,7 @@ func processConcurrently[T any](
 	}
 	close(jobs)
 
-	numWorkers := runtime.NumCPU()
+	numWorkers := maxWorkers
 	if numItems < numWorkers {
 		numWorkers = numItems
 	}

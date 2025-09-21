@@ -5,7 +5,10 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
+	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/neovim/go-client/nvim"
@@ -102,16 +105,49 @@ func (m *Manager) Close() {
 
 // ApplyChanges updates Neovim buffers with the provided file contents.
 func (m *Manager) ApplyChanges(changes []model.FileChange, progressCb func(int)) (updated, failed []string) {
-	for i, change := range changes {
-		if m.updateBuffer(change.Path, change.Content) {
-			updated = append(updated, change.Path)
-		} else {
-			failed = append(failed, change.Path)
-		}
-		if progressCb != nil {
-			progressCb(i + 1)
-		}
+	numChanges := len(changes)
+	if numChanges == 0 {
+		return nil, nil
 	}
+
+	var wg sync.WaitGroup
+	var updatedMutex, failedMutex sync.Mutex
+	var progressCounter int32
+
+	jobs := make(chan model.FileChange, numChanges)
+	for _, change := range changes {
+		jobs <- change
+	}
+	close(jobs)
+
+	numWorkers := runtime.NumCPU()
+	if numChanges < numWorkers {
+		numWorkers = numChanges
+	}
+
+	for i := 0; i < numWorkers; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for change := range jobs {
+				if m.updateBuffer(change.Path, change.Content) {
+					updatedMutex.Lock()
+					updated = append(updated, change.Path)
+					updatedMutex.Unlock()
+				} else {
+					failedMutex.Lock()
+					failed = append(failed, change.Path)
+					failedMutex.Unlock()
+				}
+				if progressCb != nil {
+					current := atomic.AddInt32(&progressCounter, 1)
+					progressCb(int(current))
+				}
+			}
+		}()
+	}
+
+	wg.Wait()
 	return updated, failed
 }
 
@@ -145,16 +181,49 @@ func (m *Manager) SaveAllBuffers() {
 
 // UndoFiles reverts a set of operations.
 func (m *Manager) UndoFiles(ops []state.Operation, progressCb func(int)) (undone, failed []string) {
-	for i, op := range ops {
-		if m.undoFile(op) {
-			undone = append(undone, op.Path)
-		} else {
-			failed = append(failed, op.Path)
-		}
-		if progressCb != nil {
-			progressCb(i + 1)
-		}
+	numOps := len(ops)
+	if numOps == 0 {
+		return nil, nil
 	}
+
+	var wg sync.WaitGroup
+	var undoneMutex, failedMutex sync.Mutex
+	var progressCounter int32
+
+	jobs := make(chan state.Operation, numOps)
+	for _, op := range ops {
+		jobs <- op
+	}
+	close(jobs)
+
+	numWorkers := runtime.NumCPU()
+	if numOps < numWorkers {
+		numWorkers = numOps
+	}
+
+	for i := 0; i < numWorkers; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for op := range jobs {
+				if m.undoFile(op) {
+					undoneMutex.Lock()
+					undone = append(undone, op.Path)
+					undoneMutex.Unlock()
+				} else {
+					failedMutex.Lock()
+					failed = append(failed, op.Path)
+					failedMutex.Unlock()
+				}
+				if progressCb != nil {
+					current := atomic.AddInt32(&progressCounter, 1)
+					progressCb(int(current))
+				}
+			}
+		}()
+	}
+
+	wg.Wait()
 	return undone, failed
 }
 
@@ -204,16 +273,49 @@ func (m *Manager) undoFile(op state.Operation) bool {
 
 // RedoFiles redoes a set of operations.
 func (m *Manager) RedoFiles(ops []state.Operation, progressCb func(int)) (redone, failed []string) {
-	for i, op := range ops {
-		if m.redoFile(op.Path) {
-			redone = append(redone, op.Path)
-		} else {
-			failed = append(failed, op.Path)
-		}
-		if progressCb != nil {
-			progressCb(i + 1)
-		}
+	numOps := len(ops)
+	if numOps == 0 {
+		return nil, nil
 	}
+
+	var wg sync.WaitGroup
+	var redoneMutex, failedMutex sync.Mutex
+	var progressCounter int32
+
+	jobs := make(chan state.Operation, numOps)
+	for _, op := range ops {
+		jobs <- op
+	}
+	close(jobs)
+
+	numWorkers := runtime.NumCPU()
+	if numOps < numWorkers {
+		numWorkers = numOps
+	}
+
+	for i := 0; i < numWorkers; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for op := range jobs {
+				if m.redoFile(op.Path) {
+					redoneMutex.Lock()
+					redone = append(redone, op.Path)
+					redoneMutex.Unlock()
+				} else {
+					failedMutex.Lock()
+					failed = append(failed, op.Path)
+					failedMutex.Unlock()
+				}
+				if progressCb != nil {
+					current := atomic.AddInt32(&progressCounter, 1)
+					progressCb(int(current))
+				}
+			}
+		}()
+	}
+
+	wg.Wait()
 	return redone, failed
 }
 

@@ -4,9 +4,9 @@ import (
 	"fmt"
 	"os"
 
-	application "github.com/sokinpui/itf.go/internal/app"
-	"github.com/sokinpui/itf.go/internal/cli"
+	"github.com/sokinpui/itf.go/cli"
 	"github.com/sokinpui/itf.go/internal/tui"
+	"github.com/sokinpui/itf.go/itf"
 
 	tea "github.com/charmbracelet/bubbletea"
 )
@@ -18,7 +18,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	app, err := application.New(cfg)
+	app, err := itf.New(cfg)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Failed to initialize application: %v\n", err)
 		os.Exit(1)

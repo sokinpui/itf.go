@@ -13,8 +13,8 @@ import (
 	"github.com/neovim/go-client/nvim"
 
 	"github.com/sokinpui/itf.go/internal/fs"
-	"github.com/sokinpui/itf.go/internal/model"
 	"github.com/sokinpui/itf.go/internal/state"
+	"github.com/sokinpui/itf.go/model"
 )
 
 const (

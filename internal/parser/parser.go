@@ -2,12 +2,13 @@ package parser
 
 import (
 	"fmt"
-	"github.com/sokinpui/itf.go/internal/fs"
-	"github.com/sokinpui/itf.go/internal/model"
-	"github.com/sokinpui/itf.go/internal/patcher"
 	"path/filepath"
 	"regexp"
 	"strings"
+
+	"github.com/sokinpui/itf.go/internal/fs"
+	"github.com/sokinpui/itf.go/internal/patcher"
+	"github.com/sokinpui/itf.go/model"
 )
 
 // ExecutionPlan contains all the changes and setup needed for an operation.

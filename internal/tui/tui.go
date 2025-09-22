@@ -8,9 +8,9 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
-	"github.com/sokinpui/itf.go/internal/app"
-	"github.com/sokinpui/itf.go/internal/cli"
-	"github.com/sokinpui/itf.go/internal/model"
+	"github.com/sokinpui/itf.go/cli"
+	"github.com/sokinpui/itf.go/itf"
+	"github.com/sokinpui/itf.go/model"
 )
 
 // --- Styles ---
@@ -61,7 +61,7 @@ type progressMsg struct {
 
 // --- Model ---
 type Model struct {
-	app             *app.App
+	app             *itf.App
 	summary         model.Summary
 	err             error
 	done            bool
@@ -72,7 +72,7 @@ type Model struct {
 	noAnimation     bool
 }
 
-func New(app *app.App, cfg *cli.Config) *Model {
+func New(app *itf.App, cfg *cli.Config) *Model {
 	return &Model{
 		app:         app,
 		spinner:     newSpinner(),
@@ -204,7 +204,7 @@ func (m *Model) runApp() tea.Msg {
 	summary, err := m.app.Execute()
 	if err != nil {
 		// Check for detailed error to print stack
-		if e, ok := err.(*app.DetailedError); ok {
+		if e, ok := err.(*itf.DetailedError); ok {
 			// The TUI will exit, so we can print to stderr here for the stack trace.
 			fmt.Fprintf(os.Stderr, "\n--- Stack Trace ---\n%s\n", e.Stack)
 		}

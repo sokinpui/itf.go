@@ -1,19 +1,20 @@
-package app
+package itf
 
 import (
 	"fmt"
 	"os"
 	"path/filepath"
 	"runtime/debug"
+	"strings"
 
-	"github.com/sokinpui/itf.go/internal/cli"
+	"github.com/sokinpui/itf.go/cli"
 	"github.com/sokinpui/itf.go/internal/fs"
-	"github.com/sokinpui/itf.go/internal/model"
 	"github.com/sokinpui/itf.go/internal/nvim"
 	"github.com/sokinpui/itf.go/internal/parser"
 	"github.com/sokinpui/itf.go/internal/patcher"
 	"github.com/sokinpui/itf.go/internal/source"
 	"github.com/sokinpui/itf.go/internal/state"
+	"github.com/sokinpui/itf.go/model"
 )
 
 // ProgressUpdate is a callback function to report progress.
@@ -58,6 +59,50 @@ func New(cfg *cli.Config) (*App, error) {
 // SetProgressCallback sets a function to be called for progress updates.
 func (a *App) SetProgressCallback(cb ProgressUpdate) {
 	a.progressCallback = cb
+}
+
+// Parse creates a plan from content and returns a map of file paths to their new content.
+func (a *App) Parse(content string) (map[string]string, error) {
+	plan, err := parser.CreatePlan(content, a.pathResolver, a.cfg.Extensions)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create execution plan: %w", err)
+	}
+
+	changes := make(map[string]string)
+	for _, change := range plan.Changes {
+		changes[change.Path] = strings.Join(change.Content, "\n")
+	}
+
+	return changes, nil
+}
+
+// Apply takes a map of file paths to content and applies the changes.
+func (a *App) Apply(changes map[string]string) (model.Summary, error) {
+	planChanges := make([]model.FileChange, 0, len(changes))
+	targetPaths := make([]string, 0, len(changes))
+
+	for path, content := range changes {
+		planChanges = append(planChanges, model.FileChange{
+			Path:    path,
+			Content: strings.Split(content, "\n"),
+			Source:  "library",
+		})
+		targetPaths = append(targetPaths, path)
+	}
+
+	actions, dirs := fs.GetFileActionsAndDirs(targetPaths)
+	plan := &parser.ExecutionPlan{
+		Changes:      planChanges,
+		FileActions:  actions,
+		DirsToCreate: dirs,
+		Failed:       []string{},
+	}
+
+	if err := fs.CreateDirs(plan.DirsToCreate); err != nil {
+		return model.Summary{}, err
+	}
+
+	return a.applyChanges(plan)
 }
 
 // Execute executes the main application logic based on parsed flags.
@@ -149,7 +194,7 @@ func (a *App) applyChanges(plan *parser.ExecutionPlan) (model.Summary, error) {
 		} else if action == "modify" {
 			if source == "diff" {
 				diffApplied = append(diffApplied, path)
-			} else { // "codeblock"
+			} else { // "codeblock" or "library"
 				modifiedByExt = append(modifiedByExt, path)
 			}
 		}

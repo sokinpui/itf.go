@@ -3,6 +3,11 @@ package patcher
 import (
 	"fmt"
 	"strings"
+	"unicode/utf8"
+)
+
+const (
+	similarityThreshold = 0.8 // Minimum similarity score (80%) to be considered a match.
 )
 
 // This file is a direct port of the logic from diff_corrector.py.
@@ -38,12 +43,74 @@ func normalizeLineForMatching(line string) string {
 	return strings.Join(strings.Fields(line), " ")
 }
 
+// levenshteinDistance calculates the number of edits (insertions, deletions,
+// or substitutions) required to change one string into the other.
+func levenshteinDistance(a, b string) int {
+	// Using rune slices to handle multi-byte characters correctly.
+	s1 := []rune(a)
+	s2 := []rune(b)
+	n1, n2 := len(s1), len(s2)
+
+	if n1 == 0 {
+		return n2
+	}
+	if n2 == 0 {
+		return n1
+	}
+
+	// Initialize the dynamic programming matrix.
+	// The extra row and column are for the empty string case.
+	matrix := make([][]int, n1+1)
+	for i := range matrix {
+		matrix[i] = make([]int, n2+1)
+	}
+
+	for i := 0; i <= n1; i++ {
+		matrix[i][0] = i
+	}
+	for j := 0; j <= n2; j++ {
+		matrix[0][j] = j
+	}
+
+	// Fill the rest of the matrix.
+	for i := 1; i <= n1; i++ {
+		for j := 1; j <= n2; j++ {
+			cost := 0
+			if s1[i-1] != s2[j-1] {
+				cost = 1
+			}
+			// Find the minimum of the three adjacent cells (deletion, insertion, substitution).
+			minVal := matrix[i-1][j] + 1         // Deletion
+			if matrix[i][j-1]+1 < minVal {       // Insertion
+				minVal = matrix[i][j-1] + 1
+			}
+			if matrix[i-1][j-1]+cost < minVal { // Substitution
+				minVal = matrix[i-1][j-1] + cost
+			}
+			matrix[i][j] = minVal
+		}
+	}
+
+	return matrix[n1][n2]
+}
+
+// lineSimilarity calculates a similarity score between 0.0 and 1.0 for two strings.
+func lineSimilarity(a, b string) float64 {
+	distance := float64(levenshteinDistance(a, b))
+	lenA := float64(utf8.RuneCountInString(a))
+	lenB := float64(utf8.RuneCountInString(b))
+
+	if lenA == 0 && lenB == 0 {
+		return 1.0
+	}
+
+	// The score is 1 minus the normalized distance.
+	return 1.0 - (distance / (max(lenA, lenB)))
+}
+
 // matchBlock finds the starting line number of a `block` of code within `source`.
-// It is designed to be resilient to whitespace and empty line changes. It works by:
-// 1. Temporarily filtering out empty lines from the source.
-// 2. Keeping a map of filtered line numbers back to their original line numbers.
-// 3. Performing a whitespace-normalized comparison to find the block.
-// 4. Returning the original line number where the match began.
+// It uses a fuzzy matching algorithm based on Levenshtein distance to find the
+// best possible match, even if the source has been slightly modified.
 func matchBlock(source, block []string) int {
 	if len(block) == 0 {
 		return -1
@@ -64,19 +131,34 @@ func matchBlock(source, block []string) int {
 		}
 	}
 
+	if len(filteredSource) < len(normalizedBlock) {
+		return -1
+	}
+
+	bestScore := -1.0
+	bestMatchLine := -1
+
+	// Use a sliding window to find the best matching block.
 	for i := 0; i <= len(filteredSource)-len(normalizedBlock); i++ {
-		match := true
-		for j := 0; j < len(normalizedBlock); j++ {
-			if filteredSource[i+j] != normalizedBlock[j] {
-				match = false
-				break
-			}
+		currentTotalScore := 0.0
+		for j, blockLine := range normalizedBlock {
+			sourceLine := filteredSource[i+j]
+			currentTotalScore += lineSimilarity(sourceLine, blockLine)
 		}
-		if match {
-			return originalLineNumbers[i]
+
+		avgScore := currentTotalScore / float64(len(normalizedBlock))
+
+		if avgScore > bestScore {
+			bestScore = avgScore
+			bestMatchLine = originalLineNumbers[i]
 		}
 	}
-	return -1
+
+	if bestScore >= similarityThreshold {
+		return bestMatchLine
+	}
+
+	return -1 // No match found that meets the threshold.
 }
 
 func buildHunkHeader(oldStart, oldLines, newStart, newLines int) string {

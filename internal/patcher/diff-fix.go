@@ -32,35 +32,42 @@ func getTargetBlock(diff []string) []string {
 	return block
 }
 
+// normalizeLineForMatching prepares a line for comparison by trimming whitespace
+// and normalizing all internal whitespace sequences to a single space.
+func normalizeLineForMatching(line string) string {
+	return strings.Join(strings.Fields(line), " ")
+}
+
 // matchBlock finds the starting line number of a `block` of code within `source`.
 // It is designed to be resilient to whitespace and empty line changes. It works by:
 // 1. Temporarily filtering out empty lines from the source.
 // 2. Keeping a map of filtered line numbers back to their original line numbers.
-// 3. Performing a stripped-whitespace comparison to find the block.
+// 3. Performing a whitespace-normalized comparison to find the block.
 // 4. Returning the original line number where the match began.
 func matchBlock(source, block []string) int {
 	if len(block) == 0 {
 		return -1
 	}
 
-	strippedBlock := make([]string, len(block))
+	normalizedBlock := make([]string, len(block))
 	for i, line := range block {
-		strippedBlock[i] = strings.TrimSpace(line)
+		normalizedBlock[i] = normalizeLineForMatching(line)
 	}
 
 	var filteredSource []string
 	var originalLineNumbers []int
 	for i, line := range source {
-		if strings.TrimSpace(line) != "" {
-			filteredSource = append(filteredSource, strings.TrimSpace(line))
+		normalizedLine := normalizeLineForMatching(line)
+		if normalizedLine != "" {
+			filteredSource = append(filteredSource, normalizedLine)
 			originalLineNumbers = append(originalLineNumbers, i+1)
 		}
 	}
 
-	for i := 0; i <= len(filteredSource)-len(strippedBlock); i++ {
+	for i := 0; i <= len(filteredSource)-len(normalizedBlock); i++ {
 		match := true
-		for j := 0; j < len(strippedBlock); j++ {
-			if filteredSource[i+j] != strippedBlock[j] {
+		for j := 0; j < len(normalizedBlock); j++ {
+			if filteredSource[i+j] != normalizedBlock[j] {
 				match = false
 				break
 			}

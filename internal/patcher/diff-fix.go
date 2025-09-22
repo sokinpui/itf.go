@@ -7,38 +7,66 @@ import (
 
 // This file is a direct port of the logic from diff_corrector.py.
 
+// getTargetBlock creates a "search pattern" from a diff hunk.
+// It uses only lines that are guaranteed to be in the original source file
+// (context ` ` and removed `-` lines). It also ignores empty lines to make
+// matching more robust against whitespace-only changes.
 func getTargetBlock(diff []string) []string {
 	var block []string
 	for _, line := range diff {
+		var content string
+		isTarget := false
+
 		if strings.HasPrefix(line, "-") {
-			block = append(block, line[1:])
-		} else if !strings.HasPrefix(line, "+") {
-			block = append(block, line)
+			content = line[1:]
+			isTarget = true
+		} else if strings.HasPrefix(line, " ") {
+			content = line[1:]
+			isTarget = true
+		}
+
+		if isTarget && strings.TrimSpace(content) != "" {
+			block = append(block, content)
 		}
 	}
 	return block
 }
 
+// matchBlock finds the starting line number of a `block` of code within `source`.
+// It is designed to be resilient to whitespace and empty line changes. It works by:
+// 1. Temporarily filtering out empty lines from the source.
+// 2. Keeping a map of filtered line numbers back to their original line numbers.
+// 3. Performing a stripped-whitespace comparison to find the block.
+// 4. Returning the original line number where the match began.
 func matchBlock(source, block []string) int {
+	if len(block) == 0 {
+		return -1
+	}
+
 	strippedBlock := make([]string, len(block))
 	for i, line := range block {
 		strippedBlock[i] = strings.TrimSpace(line)
 	}
-	strippedSource := make([]string, len(source))
+
+	var filteredSource []string
+	var originalLineNumbers []int
 	for i, line := range source {
-		strippedSource[i] = strings.TrimSpace(line)
+		if strings.TrimSpace(line) != "" {
+			filteredSource = append(filteredSource, strings.TrimSpace(line))
+			originalLineNumbers = append(originalLineNumbers, i+1)
+		}
 	}
 
-	for i := 0; i <= len(strippedSource)-len(strippedBlock); i++ {
+	for i := 0; i <= len(filteredSource)-len(strippedBlock); i++ {
 		match := true
 		for j := 0; j < len(strippedBlock); j++ {
-			if strippedSource[i+j] != strippedBlock[j] {
+			if filteredSource[i+j] != strippedBlock[j] {
 				match = false
 				break
 			}
 		}
 		if match {
-			return i + 1 // 1-based line number
+			return originalLineNumbers[i]
 		}
 	}
 	return -1

@@ -6,8 +6,6 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
-	"sync"
-	"sync/atomic"
 	"time"
 
 	"github.com/neovim/go-client/nvim"
@@ -18,8 +16,7 @@ import (
 )
 
 const (
-	undoDir    = "~/.local/state/nvim/undo/"
-	maxWorkers = 16 // Suitable for I/O-bound tasks like IPC with Neovim.
+	undoDir = "~/.local/state/nvim/undo/"
 )
 
 // Manager handles the connection and interaction with a Neovim instance.
@@ -105,8 +102,8 @@ func (m *Manager) Close() {
 	}
 }
 
-// processConcurrently is a generic helper function to run a set of jobs in parallel.
-func processConcurrently[T any](
+// processSequentially is a generic helper function to run a set of jobs sequentially.
+func processSequentially[T any](
 	items []T,
 	processFn func(item T) (path string, success bool),
 	progressCb func(int),
@@ -116,45 +113,18 @@ func processConcurrently[T any](
 		return nil, nil
 	}
 
-	var wg sync.WaitGroup
-	var succeededMutex, failedMutex sync.Mutex
-	var progressCounter int32
-
-	jobs := make(chan T, numItems)
-	for _, item := range items {
-		jobs <- item
-	}
-	close(jobs)
-
-	numWorkers := maxWorkers
-	if numItems < numWorkers {
-		numWorkers = numItems
+	for i, item := range items {
+		path, success := processFn(item)
+		if success {
+			succeeded = append(succeeded, path)
+		} else {
+			failed = append(failed, path)
+		}
+		if progressCb != nil {
+			progressCb(i + 1)
+		}
 	}
 
-	for i := 0; i < numWorkers; i++ {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
-			for item := range jobs {
-				path, success := processFn(item)
-				if success {
-					succeededMutex.Lock()
-					succeeded = append(succeeded, path)
-					succeededMutex.Unlock()
-				} else {
-					failedMutex.Lock()
-					failed = append(failed, path)
-					failedMutex.Unlock()
-				}
-				if progressCb != nil {
-					current := atomic.AddInt32(&progressCounter, 1)
-					progressCb(int(current))
-				}
-			}
-		}()
-	}
-
-	wg.Wait()
 	return succeeded, failed
 }
 
@@ -163,7 +133,7 @@ func (m *Manager) ApplyChanges(changes []model.FileChange, progressCb func(int))
 	processFn := func(change model.FileChange) (string, bool) {
 		return change.Path, m.updateBuffer(change.Path, change.Content)
 	}
-	return processConcurrently(changes, processFn, progressCb)
+	return processSequentially(changes, processFn, progressCb)
 }
 
 func (m *Manager) updateBuffer(filePath string, content []string) bool {
@@ -199,7 +169,7 @@ func (m *Manager) UndoFiles(ops []state.Operation, progressCb func(int)) (undone
 	processFn := func(op state.Operation) (string, bool) {
 		return op.Path, m.undoFile(op)
 	}
-	return processConcurrently(ops, processFn, progressCb)
+	return processSequentially(ops, processFn, progressCb)
 }
 
 func (m *Manager) undoFile(op state.Operation) bool {
@@ -251,7 +221,7 @@ func (m *Manager) RedoFiles(ops []state.Operation, progressCb func(int)) (redone
 	processFn := func(op state.Operation) (string, bool) {
 		return op.Path, m.redoFile(op.Path)
 	}
-	return processConcurrently(ops, processFn, progressCb)
+	return processSequentially(ops, processFn, progressCb)
 }
 
 func (m *Manager) redoFile(filePath string) bool {

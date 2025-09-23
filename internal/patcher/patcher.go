@@ -7,6 +7,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"regexp"
+	"runtime"
 	"strings"
 
 	"github.com/sokinpui/itf.go/internal/fs"
@@ -97,7 +98,8 @@ func applyPatch(filePath, patchContent string, resolver *fs.PathResolver) ([]str
 		tmpFile.Close()
 	}
 
-	cmd := exec.Command("patch", "-s", "-p1", "--no-backup-if-mismatch", "-o", "-", sourcePath)
+	devNull := "/dev/null"
+	cmd := exec.Command("patch", "-s", "-p1", "--no-backup-if-mismatch", "-r", devNull, "-o", "-", sourcePath)
 	cmd.Stdin = strings.NewReader(patchContent)
 
 	var out bytes.Buffer

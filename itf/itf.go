@@ -93,6 +93,11 @@ func (a *App) processContent() (model.Summary, error) {
 	if err != nil {
 		return model.Summary{}, err
 	}
+	return a.processAndApply(content)
+}
+
+// processAndApply is the core logic of processing content and applying changes.
+func (a *App) processAndApply(content string) (model.Summary, error) {
 	if content == "" {
 		return model.Summary{Message: "Source is empty. Nothing to process."}, nil
 	}

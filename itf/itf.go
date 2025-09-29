@@ -5,7 +5,6 @@ import (
 	"os"
 	"path/filepath"
 	"runtime/debug"
-	"strings"
 
 	"github.com/sokinpui/itf.go/cli"
 	"github.com/sokinpui/itf.go/internal/fs"
@@ -61,76 +60,6 @@ func (a *App) SetProgressCallback(cb ProgressUpdate) {
 	a.progressCallback = cb
 }
 
-// Parse creates a plan from content and returns a map of file paths to their new content.
-func (a *App) Parse(content string, cfg *cli.Config) (map[string]string, error) {
-	if cfg == nil {
-		cfg = a.cfg
-	}
-	pathResolver := fs.NewPathResolver()
-	plan, err := parser.CreatePlan(content, pathResolver, cfg.Extensions)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create execution plan: %w", err)
-	}
-
-	changes := make(map[string]string)
-	for _, change := range plan.Changes {
-		changes[change.Path] = strings.Join(change.Content, "\n")
-	}
-
-	return changes, nil
-}
-
-// Apply takes a map of file paths to content and applies the changes.
-func (a *App) Apply(changes map[string]string, cfg *cli.Config) (model.Summary, error) {
-	if cfg == nil {
-		cfg = a.cfg
-	}
-	planChanges := make([]model.FileChange, 0, len(changes))
-	targetPaths := make([]string, 0, len(changes))
-
-	for path, content := range changes {
-		planChanges = append(planChanges, model.FileChange{
-			Path:    path,
-			Content: strings.Split(content, "\n"),
-			Source:  "library",
-		})
-		targetPaths = append(targetPaths, path)
-	}
-
-	actions, dirs := fs.GetFileActionsAndDirs(targetPaths)
-	plan := &parser.ExecutionPlan{
-		Changes:      planChanges,
-		FileActions:  actions,
-		DirsToCreate: dirs,
-		Failed:       []string{},
-	}
-
-	if err := fs.CreateDirs(plan.DirsToCreate); err != nil {
-		return model.Summary{}, err
-	}
-
-	return a.applyChanges(plan, cfg)
-}
-
-// GetToolCall parses content and returns the combined content of all tool blocks.
-func (a *App) GetToolCall(content string) (string, error) {
-	tools, err := parser.ExtractToolBlocks(content)
-	if err != nil {
-		return "", fmt.Errorf("failed to extract tool blocks: %w", err)
-	}
-
-	if len(tools) == 0 {
-		return "", nil
-	}
-
-	var toolContents []string
-	for _, tool := range tools {
-		toolContents = append(toolContents, tool.Content)
-	}
-
-	return strings.Join(toolContents, "\n"), nil
-}
-
 // Execute executes the main application logic based on parsed flags.
 func (a *App) Execute() (summary model.Summary, err error) {
 	// Centralized panic recovery.
@@ -180,11 +109,11 @@ func (a *App) processContent() (model.Summary, error) {
 		return model.Summary{}, err
 	}
 
-	return a.applyChanges(plan, a.cfg)
+	return a.applyChanges(plan)
 }
 
 // applyChanges connects to Neovim and applies the planned file changes.
-func (a *App) applyChanges(plan *parser.ExecutionPlan, cfg *cli.Config) (model.Summary, error) {
+func (a *App) applyChanges(plan *parser.ExecutionPlan) (model.Summary, error) {
 	manager, err := nvim.New()
 	if err != nil {
 		return model.Summary{}, err
@@ -229,7 +158,7 @@ func (a *App) applyChanges(plan *parser.ExecutionPlan, cfg *cli.Config) (model.S
 	}
 
 	if len(updatedFiles) > 0 {
-		if !cfg.Buffer { // Save by default
+		if !a.cfg.Buffer { // Save by default
 			manager.SaveAllBuffers()
 			ops := state.CreateOperations(updatedFiles, plan.FileActions)
 			a.stateManager.Write(ops)

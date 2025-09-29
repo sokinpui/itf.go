@@ -4,7 +4,8 @@ package model
 type FileChange struct {
 	Path    string
 	Content []string
-	Source  string
+	Source   string
+	RawBlock string // The full original code block, e.g., "```go\n...\n```"
 }
 
 // DiffBlock represents a raw diff block from the source content.

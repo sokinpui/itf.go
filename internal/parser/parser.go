@@ -85,26 +85,27 @@ func parseFileBlocks(allBlocks []CodeBlock, resolver *fs.PathResolver, extension
 			continue // Diffs are handled separately.
 		}
 
-		filePath := extractPathFromHint(block.Hint)
+		filePath := ExtractPathFromHint(block.Hint)
 		if filePath == "" {
 			continue
 		}
 
-		if !hasAllowedExtension(filePath, extensions) {
+		if !HasAllowedExtension(filePath, extensions) {
 			continue
 		}
 
-		blockContent := strings.TrimRight(block.Content, "\n")
-		lines := strings.Split(blockContent, "\n")
+		trimmedContent := strings.TrimRight(block.Content, "\n")
+		lines := strings.Split(trimmedContent, "\n")
 		// Handle empty blocks correctly.
 		if len(lines) == 1 && lines[0] == "" {
 			lines = []string{}
 		}
 
 		blocks = append(blocks, model.FileChange{
-			Path:    resolver.Resolve(filePath),
-			Content: lines,
-			Source:  "codeblock",
+			Path:     resolver.Resolve(filePath),
+			Content:  lines,
+			Source:   "codeblock",
+			RawBlock: fmt.Sprintf("```%s\n%s\n```", block.Lang, trimmedContent),
 		})
 	}
 	return blocks
@@ -130,7 +131,7 @@ func extractDiffBlocksFromParsed(allBlocks []CodeBlock) []model.DiffBlock {
 			continue
 		}
 
-		rawContent := strings.TrimSpace(block.Content)
+		rawContent := strings.Trim(block.Content, "\n")
 		filePath := patcher.ExtractPathFromDiff(rawContent)
 		if filePath == "" {
 			// Silently skip blocks without a path.
@@ -162,7 +163,7 @@ func ExtractToolBlocks(content string) ([]model.ToolBlock, error) {
 	return tools, nil
 }
 
-func extractPathFromHint(hint string) string {
+func ExtractPathFromHint(hint string) string {
 	hint = strings.TrimSpace(hint)
 
 	// A path hint must be enclosed in backticks, e.g., `path/to/file.go`
@@ -177,7 +178,7 @@ func extractPathFromHint(hint string) string {
 	return ""
 }
 
-func hasAllowedExtension(path string, extensions []string) bool {
+func HasAllowedExtension(path string, extensions []string) bool {
 	if len(extensions) == 0 {
 		return true
 	}

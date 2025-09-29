@@ -146,12 +146,10 @@ func extractDiffBlocksFromParsed(allBlocks []CodeBlock) []model.DiffBlock {
 }
 
 // ExtractToolBlocks finds all tool blocks in the content.
-func ExtractToolBlocks(content string) []model.ToolBlock {
+func ExtractToolBlocks(content string) ([]model.ToolBlock, error) {
 	allBlocks, err := ExtractCodeBlocks([]byte(content))
 	if err != nil {
-		// This function is also used for non-critical paths,
-		// so we just return nil. The error isn't critical here.
-		return nil
+		return nil, err
 	}
 	var tools []model.ToolBlock
 	for _, block := range allBlocks {
@@ -161,7 +159,7 @@ func ExtractToolBlocks(content string) []model.ToolBlock {
 			})
 		}
 	}
-	return tools
+	return tools, nil
 }
 
 func extractPathFromHint(hint string) string {

@@ -112,6 +112,25 @@ func (a *App) Apply(changes map[string]string, cfg *cli.Config) (model.Summary, 
 	return a.applyChanges(plan, cfg)
 }
 
+// GetToolCall parses content and returns the combined content of all tool blocks.
+func (a *App) GetToolCall(content string) (string, error) {
+	tools, err := parser.ExtractToolBlocks(content)
+	if err != nil {
+		return "", fmt.Errorf("failed to extract tool blocks: %w", err)
+	}
+
+	if len(tools) == 0 {
+		return "", nil
+	}
+
+	var toolContents []string
+	for _, tool := range tools {
+		toolContents = append(toolContents, tool.Content)
+	}
+
+	return strings.Join(toolContents, "\n"), nil
+}
+
 // Execute executes the main application logic based on parsed flags.
 func (a *App) Execute() (summary model.Summary, err error) {
 	// Centralized panic recovery.
@@ -262,7 +281,11 @@ func (a *App) printTools() (model.Summary, error) {
 		return model.Summary{}, nil
 	}
 
-	tools := parser.ExtractToolBlocks(content)
+	tools, err := parser.ExtractToolBlocks(content)
+	if err != nil {
+		return model.Summary{}, fmt.Errorf("failed to extract tool blocks: %w", err)
+	}
+
 	for _, tool := range tools {
 		fmt.Println(tool.Content)
 	}

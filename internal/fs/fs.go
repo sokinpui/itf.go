@@ -41,48 +41,32 @@ func IsEmpty(name string) (bool, error) {
 
 // PathResolver finds absolute paths for files.
 type PathResolver struct {
-	lookupDirs []string
+	wd string
 }
 
 // NewPathResolver creates a new PathResolver.
-func NewPathResolver(lookupDirs []string) *PathResolver {
-	if len(lookupDirs) == 0 {
-		wd, err := os.Getwd()
-		if err != nil {
-			// This is unlikely to fail, but if it does, it's a critical error.
-			panic(fmt.Sprintf("could not get current working directory: %v", err))
-		}
-		return &PathResolver{lookupDirs: []string{wd}}
+func NewPathResolver() *PathResolver {
+	wd, err := os.Getwd()
+	if err != nil {
+		// This is unlikely to fail, but if it does, it's a critical error.
+		panic(fmt.Sprintf("could not get current working directory: %v", err))
 	}
-
-	absDirs := make([]string, len(lookupDirs))
-	for i, dir := range lookupDirs {
-		abs, err := filepath.Abs(dir)
-		if err != nil {
-			continue
-		}
-		absDirs[i] = abs
-	}
-	return &PathResolver{lookupDirs: absDirs}
+	return &PathResolver{wd: wd}
 }
 
-// Resolve finds an absolute path, assuming a new file in the first lookup
-// directory if it doesn't exist.
+// Resolve finds an absolute path for a given relative path.
 func (r *PathResolver) Resolve(relativePath string) string {
-	if existing := r.ResolveExisting(relativePath); existing != "" {
-		return existing
+	if filepath.IsAbs(relativePath) {
+		return filepath.Clean(relativePath)
 	}
-	// If not found, create the path relative to the first lookup directory.
-	return filepath.Join(r.lookupDirs[0], relativePath)
+	return filepath.Join(r.wd, relativePath)
 }
 
 // ResolveExisting finds an absolute path only if the file exists.
 func (r *PathResolver) ResolveExisting(relativePath string) string {
-	for _, dir := range r.lookupDirs {
-		absPath := filepath.Join(dir, relativePath)
-		if _, err := os.Stat(absPath); err == nil {
-			return absPath
-		}
+	path := r.Resolve(relativePath)
+	if _, err := os.Stat(path); err == nil {
+		return path
 	}
 	return ""
 }

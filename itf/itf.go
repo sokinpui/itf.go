@@ -45,7 +45,7 @@ func New(cfg *cli.Config) (*App, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to initialize state manager: %w", err)
 	}
-	pathResolver := fs.NewPathResolver(cfg.LookupDirs)
+	pathResolver := fs.NewPathResolver()
 	sourceProvider := source.New()
 
 	return &App{
@@ -66,7 +66,7 @@ func (a *App) Parse(content string, cfg *cli.Config) (map[string]string, error) 
 	if cfg == nil {
 		cfg = a.cfg
 	}
-	pathResolver := fs.NewPathResolver(cfg.LookupDirs)
+	pathResolver := fs.NewPathResolver()
 	plan, err := parser.CreatePlan(content, pathResolver, cfg.Extensions)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create execution plan: %w", err)

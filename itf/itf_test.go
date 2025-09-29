@@ -44,7 +44,6 @@ func TestLibraryInterface(t *testing.T) {
 	t.Run("Parse with custom config", func(t *testing.T) {
 		parseCfg := &cli.Config{
 			Extensions: []string{".go"},
-			LookupDirs: []string{tempDir},
 		}
 		content := "`dummy.go`\n\n```go\npackage main\n\nfunc main() {\n\t// new content\n}\n```"
 		changes, err := app.Parse(content, parseCfg)

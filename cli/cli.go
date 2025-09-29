@@ -14,7 +14,6 @@ type Config struct {
 	Undo           bool
 	Redo           bool
 	NoAnimation    bool
-	LookupDirs     []string
 	Extensions     []string
 }
 
@@ -27,7 +26,6 @@ func ParseFlags() (*Config, error) {
 	pflag.BoolVarP(&cfg.OutputTool, "output-tool", "t", false, "Print the content of tool blocks.")
 	pflag.BoolVarP(&cfg.OutputDiffFix, "output-diff-fix", "o", false, "Print the diff that corrected start and count.")
 	pflag.BoolVar(&cfg.NoAnimation, "no-animation", false, "Disable loading spinner and progress updates.")
-	pflag.StringSliceVarP(&cfg.LookupDirs, "lookup-dir", "l", []string{}, "Change directory to look for files (default: current directory).")
 	pflag.StringSliceVarP(&cfg.Extensions, "extension", "e", []string{}, "Filter by extension. Use 'diff' to process only diff blocks (e.g., 'py', 'js', 'diff').")
 
 	// Mutually exclusive history group

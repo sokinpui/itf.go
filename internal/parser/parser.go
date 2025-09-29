@@ -81,7 +81,7 @@ func parseFileBlocks(allBlocks []CodeBlock, resolver *fs.PathResolver, extension
 	var blocks []model.FileChange
 
 	for _, block := range allBlocks {
-		if block.Lang == "diff" {
+		if block.Lang == "diff" || block.Lang == "tool" {
 			continue // Diffs are handled separately.
 		}
 
@@ -143,6 +143,25 @@ func extractDiffBlocksFromParsed(allBlocks []CodeBlock) []model.DiffBlock {
 		})
 	}
 	return diffs
+}
+
+// ExtractToolBlocks finds all tool blocks in the content.
+func ExtractToolBlocks(content string) []model.ToolBlock {
+	allBlocks, err := ExtractCodeBlocks([]byte(content))
+	if err != nil {
+		// This function is also used for non-critical paths,
+		// so we just return nil. The error isn't critical here.
+		return nil
+	}
+	var tools []model.ToolBlock
+	for _, block := range allBlocks {
+		if block.Lang == "tool" {
+			tools = append(tools, model.ToolBlock{
+				Content: strings.TrimSpace(block.Content),
+			})
+		}
+	}
+	return tools
 }
 
 func extractPathFromHint(hint string) string {

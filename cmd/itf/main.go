@@ -24,10 +24,10 @@ func main() {
 		os.Exit(1)
 	}
 
-	// The --output-diff-fix flag prints to stdout and should not run the TUI.
-	if cfg.OutputDiffFix {
+	// Flags that print to stdout and should not run the TUI.
+	if cfg.OutputDiffFix || cfg.OutputTool {
 		if _, err := app.Execute(); err != nil {
-			fmt.Fprintf(os.Stderr, "Error fixing diffs: %v\n", err)
+			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 			os.Exit(1)
 		}
 		return

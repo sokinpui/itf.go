@@ -13,6 +13,11 @@ type DiffBlock struct {
 	RawContent string
 }
 
+// ToolBlock represents a raw tool block from the source content.
+type ToolBlock struct {
+	Content string
+}
+
 // Summary holds the results of an operation for display.
 type Summary struct {
 	Created  []string

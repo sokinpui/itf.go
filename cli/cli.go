@@ -9,6 +9,7 @@ import (
 // Config holds all the command-line flag values.
 type Config struct {
 	Buffer         bool
+	OutputTool     bool
 	OutputDiffFix  bool
 	Undo           bool
 	Redo           bool
@@ -23,6 +24,7 @@ func ParseFlags() (*Config, error) {
 
 	// Define flags
 	pflag.BoolVarP(&cfg.Buffer, "buffer", "b", false, "Update buffers in Neovim without saving them to disk (changes are saved by default).")
+	pflag.BoolVarP(&cfg.OutputTool, "output-tool", "t", false, "Print the content of tool blocks.")
 	pflag.BoolVarP(&cfg.OutputDiffFix, "output-diff-fix", "o", false, "Print the diff that corrected start and count.")
 	pflag.BoolVar(&cfg.NoAnimation, "no-animation", false, "Disable loading spinner and progress updates.")
 	pflag.StringSliceVarP(&cfg.LookupDirs, "lookup-dir", "l", []string{}, "Change directory to look for files (default: current directory).")

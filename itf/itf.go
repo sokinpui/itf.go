@@ -62,8 +62,12 @@ func (a *App) SetProgressCallback(cb ProgressUpdate) {
 }
 
 // Parse creates a plan from content and returns a map of file paths to their new content.
-func (a *App) Parse(content string) (map[string]string, error) {
-	plan, err := parser.CreatePlan(content, a.pathResolver, a.cfg.Extensions)
+func (a *App) Parse(content string, cfg *cli.Config) (map[string]string, error) {
+	if cfg == nil {
+		cfg = a.cfg
+	}
+	pathResolver := fs.NewPathResolver(cfg.LookupDirs)
+	plan, err := parser.CreatePlan(content, pathResolver, cfg.Extensions)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create execution plan: %w", err)
 	}
@@ -77,7 +81,10 @@ func (a *App) Parse(content string) (map[string]string, error) {
 }
 
 // Apply takes a map of file paths to content and applies the changes.
-func (a *App) Apply(changes map[string]string) (model.Summary, error) {
+func (a *App) Apply(changes map[string]string, cfg *cli.Config) (model.Summary, error) {
+	if cfg == nil {
+		cfg = a.cfg
+	}
 	planChanges := make([]model.FileChange, 0, len(changes))
 	targetPaths := make([]string, 0, len(changes))
 
@@ -102,7 +109,7 @@ func (a *App) Apply(changes map[string]string) (model.Summary, error) {
 		return model.Summary{}, err
 	}
 
-	return a.applyChanges(plan)
+	return a.applyChanges(plan, cfg)
 }
 
 // Execute executes the main application logic based on parsed flags.
@@ -122,6 +129,8 @@ func (a *App) Execute() (summary model.Summary, err error) {
 		return a.undoLastOperation()
 	case a.cfg.Redo:
 		return a.redoLastOperation()
+	case a.cfg.OutputTool:
+		return a.printTools()
 	case a.cfg.OutputDiffFix:
 		return a.fixAndPrintDiffs()
 	default:
@@ -152,11 +161,11 @@ func (a *App) processContent() (model.Summary, error) {
 		return model.Summary{}, err
 	}
 
-	return a.applyChanges(plan)
+	return a.applyChanges(plan, a.cfg)
 }
 
 // applyChanges connects to Neovim and applies the planned file changes.
-func (a *App) applyChanges(plan *parser.ExecutionPlan) (model.Summary, error) {
+func (a *App) applyChanges(plan *parser.ExecutionPlan, cfg *cli.Config) (model.Summary, error) {
 	manager, err := nvim.New()
 	if err != nil {
 		return model.Summary{}, err
@@ -201,7 +210,7 @@ func (a *App) applyChanges(plan *parser.ExecutionPlan) (model.Summary, error) {
 	}
 
 	if len(updatedFiles) > 0 {
-		if !a.cfg.Buffer { // Save by default
+		if !cfg.Buffer { // Save by default
 			manager.SaveAllBuffers()
 			ops := state.CreateOperations(updatedFiles, plan.FileActions)
 			a.stateManager.Write(ops)
@@ -239,6 +248,23 @@ func (a *App) fixAndPrintDiffs() (model.Summary, error) {
 		if corrected != "" {
 			fmt.Print(corrected)
 		}
+	}
+	return model.Summary{}, nil
+}
+
+// printTools extracts tool blocks from the source and prints them to stdout.
+func (a *App) printTools() (model.Summary, error) {
+	content, err := a.sourceProvider.GetContent()
+	if err != nil {
+		return model.Summary{}, err
+	}
+	if content == "" {
+		return model.Summary{}, nil
+	}
+
+	tools := parser.ExtractToolBlocks(content)
+	for _, tool := range tools {
+		fmt.Println(tool.Content)
 	}
 	return model.Summary{}, nil
 }

@@ -6,17 +6,9 @@ import (
 	"github.com/sokinpui/itf.go/cli"
 )
 
-// Config for using itf as a library.
-type Config struct {
-	// Update buffers without saving them to disk.
-	Buffer bool
-	// Filter by extension. Use 'diff' to process only diff blocks (e.g., 'py', 'js', 'diff').
-	Extensions []string
-}
-
 // Apply parses the given content string and applies the changes to files.
 // It returns a summary of the operations in a map.
-func Apply(content string, config Config) (map[string][]string, error) {
+func Apply(content string, config cli.Config) (map[string][]string, error) {
 	cliCfg := &cli.Config{
 		Buffer:     config.Buffer,
 		Extensions: config.Extensions,
@@ -39,4 +31,24 @@ func Apply(content string, config Config) (map[string][]string, error) {
 	}
 
 	return result, nil
+}
+
+func GetToolCall(content string, config cli.Config) (string, error) {
+	cliCfg := &cli.Config{
+		Buffer:     config.Buffer,
+		Extensions: config.Extensions,
+	}
+
+	app, err := New(cliCfg)
+	if err != nil {
+		return "", fmt.Errorf("failed to initialize itf app: %w", err)
+	}
+
+	toolCalls, err := app.GetToolCalls(content)
+	if err != nil {
+		return "", err
+	}
+
+	return toolCalls, nil
+
 }

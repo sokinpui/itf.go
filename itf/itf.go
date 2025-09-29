@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"runtime/debug"
 
 	"github.com/sokinpui/itf.go/cli"
@@ -224,6 +225,25 @@ func (a *App) printTools() (model.Summary, error) {
 		fmt.Println(tool.Content)
 	}
 	return model.Summary{}, nil
+}
+
+// GetToolCalls extracts tool blocks from content and returns them as a single string.
+func (a *App) GetToolCalls(content string) (string, error) {
+	if content == "" {
+		return "", nil
+	}
+
+	tools, err := parser.ExtractToolBlocks(content)
+	if err != nil {
+		return "", fmt.Errorf("failed to extract tool blocks: %w", err)
+	}
+
+	var toolContents []string
+	for _, tool := range tools {
+		toolContents = append(toolContents, tool.Content)
+	}
+
+	return strings.Join(toolContents, "\n"), nil
 }
 
 // undoLastOperation handles the undo logic.

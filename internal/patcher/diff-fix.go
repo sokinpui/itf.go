@@ -44,9 +44,9 @@ func normalizeLineForMatching(line string) string {
 // 2. Keeping a map of filtered line numbers back to their original line numbers.
 // 3. Performing a whitespace-normalized comparison to find the block.
 // 4. Returning the original line number where the match began.
-func matchBlock(source, block []string) int {
+func matchBlock(source, block []string, startLine int) (int, int) {
 	if len(block) == 0 {
-		return -1
+		return -1, -1
 	}
 
 	normalizedBlock := make([]string, len(block))
@@ -64,7 +64,17 @@ func matchBlock(source, block []string) int {
 		}
 	}
 
-	for i := 0; i <= len(filteredSource)-len(normalizedBlock); i++ {
+	searchStartIndex := 0
+	if startLine > 1 {
+		for i, lineNum := range originalLineNumbers {
+			if lineNum >= startLine {
+				searchStartIndex = i
+				break
+			}
+		}
+	}
+
+	for i := searchStartIndex; i <= len(filteredSource)-len(normalizedBlock); i++ {
 		match := true
 		for j := 0; j < len(normalizedBlock); j++ {
 			if filteredSource[i+j] != normalizedBlock[j] {
@@ -73,10 +83,12 @@ func matchBlock(source, block []string) int {
 			}
 		}
 		if match {
-			return originalLineNumbers[i]
+			matchStartLine := originalLineNumbers[i]
+			matchEndLine := originalLineNumbers[i+len(normalizedBlock)-1]
+			return matchStartLine, matchEndLine
 		}
 	}
-	return -1
+	return -1, -1
 }
 
 func buildHunkHeader(oldStart, oldLines, newStart, newLines int) string {
@@ -118,13 +130,15 @@ func correctDiffHunks(sourceLines []string, rawDiffContent, sourceFilePath strin
 	correctedParts = append(correctedParts, fmt.Sprintf("+++ b/%s\n", sourceFilePath))
 
 	lineDiffOffset := 0
+	lastMatchEndLine := 0
 	for _, hunk := range hunks {
 		targetBlock := getTargetBlock(hunk)
-		oldStart := matchBlock(sourceLines, targetBlock)
+		oldStart, matchEndLine := matchBlock(sourceLines, targetBlock, lastMatchEndLine+1)
 		if oldStart == -1 {
 			// Continue trying to correct other hunks, but warn the user.
 			return "", fmt.Errorf("could not find matching block for a hunk")
 		}
+		lastMatchEndLine = matchEndLine
 
 		addCount, removeCount := 0, 0
 		for _, line := range hunk {

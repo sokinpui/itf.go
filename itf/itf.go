@@ -4,10 +4,9 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"strings"
 	"runtime/debug"
+	"strings"
 
-	"github.com/sokinpui/itf.go/cli"
 	"github.com/sokinpui/itf.go/internal/fs"
 	"github.com/sokinpui/itf.go/internal/nvim"
 	"github.com/sokinpui/itf.go/internal/parser"
@@ -17,12 +16,22 @@ import (
 	"github.com/sokinpui/itf.go/model"
 )
 
+// Config holds the core application configuration.
+type Config struct {
+	Buffer        bool
+	OutputTool    bool
+	OutputDiffFix bool
+	Undo          bool
+	Redo          bool
+	Extensions    []string
+}
+
 // ProgressUpdate is a callback function to report progress.
 type ProgressUpdate func(current, total int)
 
 // App orchestrates the entire application logic.
 type App struct {
-	cfg              *cli.Config
+	cfg              *Config
 	stateManager     *state.Manager
 	pathResolver     *fs.PathResolver
 	sourceProvider   *source.SourceProvider
@@ -40,7 +49,7 @@ func (e *DetailedError) Error() string {
 }
 
 // New creates a new App instance.
-func New(cfg *cli.Config) (*App, error) {
+func New(cfg *Config) (*App, error) {
 	stateManager, err := state.New()
 	if err != nil {
 		return nil, fmt.Errorf("failed to initialize state manager: %w", err)

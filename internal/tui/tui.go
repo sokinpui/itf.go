@@ -8,7 +8,6 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
-	"github.com/sokinpui/itf.go/cli"
 	"github.com/sokinpui/itf.go/itf"
 	"github.com/sokinpui/itf.go/model"
 )
@@ -72,11 +71,11 @@ type Model struct {
 	noAnimation     bool
 }
 
-func New(app *itf.App, cfg *cli.Config) *Model {
+func New(app *itf.App, noAnimation bool) *Model {
 	return &Model{
 		app:         app,
 		spinner:     newSpinner(),
-		noAnimation: cfg.NoAnimation,
+		noAnimation: noAnimation,
 	}
 }
 

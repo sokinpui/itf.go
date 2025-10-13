@@ -2,19 +2,12 @@ package itf
 
 import (
 	"fmt"
-
-	"github.com/sokinpui/itf.go/cli"
 )
 
 // Apply parses the given content string and applies the changes to files.
 // It returns a summary of the operations in a map.
-func Apply(content string, config cli.Config) (map[string][]string, error) {
-	cliCfg := &cli.Config{
-		Buffer:     config.Buffer,
-		Extensions: config.Extensions,
-	}
-
-	app, err := New(cliCfg)
+func Apply(content string, config Config) (map[string][]string, error) {
+	app, err := New(&config)
 	if err != nil {
 		return nil, fmt.Errorf("failed to initialize itf app: %w", err)
 	}
@@ -33,13 +26,8 @@ func Apply(content string, config cli.Config) (map[string][]string, error) {
 	return result, nil
 }
 
-func GetToolCall(content string, config cli.Config) (string, error) {
-	cliCfg := &cli.Config{
-		Buffer:     config.Buffer,
-		Extensions: config.Extensions,
-	}
-
-	app, err := New(cliCfg)
+func GetToolCall(content string, config Config) (string, error) {
+	app, err := New(&config)
 	if err != nil {
 		return "", fmt.Errorf("failed to initialize itf app: %w", err)
 	}

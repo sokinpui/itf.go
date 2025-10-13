@@ -3,10 +3,10 @@ package tui
 import (
 	"fmt"
 	"os"
-	"time"
 	"strings"
+	"sync"
+	"time"
 
-	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/sokinpui/itf.go/itf"
 	"github.com/sokinpui/itf.go/model"
@@ -42,174 +42,126 @@ func (s spinner) View() string {
 	return s.frames[s.index]
 }
 
-// --- Messages ---
-type summaryMsg struct {
-	model.Summary
-}
-
-type errorMsg struct{ err error }
-
-func (e errorMsg) Error() string { return e.err.Error() }
-
-type tickMsg time.Time
-
-type progressMsg struct {
-	current int
-	total   int
-}
-
-// --- Model ---
-type Model struct {
+// TUI handles the terminal user interface.
+type TUI struct {
 	app             *itf.App
-	summary         model.Summary
-	err             error
-	done            bool
+	noAnimation     bool
 	spinner         spinner
+	mu              sync.Mutex
 	progressCurrent int
 	progressTotal   int
-	program         *tea.Program
-	noAnimation     bool
 }
 
-func New(app *itf.App, noAnimation bool) *Model {
-	return &Model{
+// New creates a new TUI.
+func New(app *itf.App, noAnimation bool) *TUI {
+	return &TUI{
 		app:         app,
-		spinner:     newSpinner(),
 		noAnimation: noAnimation,
+		spinner:     newSpinner(),
 	}
 }
 
-func (m *Model) SetProgram(p *tea.Program) {
-	m.program = p
-}
-
-func (m *Model) Init() tea.Cmd {
-	if m.noAnimation {
-		return m.runApp
+// Run starts the TUI, executes the application logic, and displays the results.
+func (t *TUI) Run() error {
+	if t.noAnimation {
+		summary, err := t.app.Execute()
+		if err != nil {
+			if e, ok := err.(*itf.DetailedError); ok {
+				fmt.Fprintf(os.Stderr, "\n--- Stack Trace ---\n%s\n", e.Stack)
+			}
+			return err
+		}
+		fmt.Print(t.renderSummary(summary))
+		return nil
 	}
-	return tea.Batch(m.runApp, m.spinnerTick())
-}
 
-func (m *Model) spinnerTick() tea.Cmd {
-	return tea.Tick(100*time.Millisecond, func(t time.Time) tea.Msg {
-		return tickMsg(t)
+	t.app.SetProgressCallback(func(current, total int) {
+		t.mu.Lock()
+		defer t.mu.Unlock()
+		t.progressCurrent = current
+		t.progressTotal = total
 	})
-}
 
-func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
-	switch msg := msg.(type) {
-	case tea.KeyMsg:
-		switch msg.String() {
-		case "q", "ctrl+c":
-			return m, tea.Quit
+	done := make(chan struct{})
+	go func() {
+		for {
+			select {
+			case <-done:
+				return
+			case <-time.After(100 * time.Millisecond):
+				t.spinner.tick()
+				t.renderProgress()
+			}
 		}
+	}()
 
-	case summaryMsg:
-		m.summary = msg.Summary
-		m.done = true
-		return m, tea.Quit
+	summary, err := t.app.Execute()
+	close(done)
 
-	case errorMsg:
-		m.err = msg
-		m.done = true
-		return m, tea.Quit
+	fmt.Print("\r\x1b[K") // Clear the progress line
 
-	case tickMsg:
-		if !m.done && !m.noAnimation {
-			m.spinner.tick()
-			return m, m.spinnerTick()
+	if err != nil {
+		if e, ok := err.(*itf.DetailedError); ok {
+			fmt.Fprintf(os.Stderr, "\n--- Stack Trace ---\n%s\n", e.Stack)
 		}
-		return m, nil
-
-	case progressMsg:
-		m.progressCurrent = msg.current
-		m.progressTotal = msg.total
-		return m, nil
-	}
-	return m, nil
-}
-
-func (m *Model) View() string {
-	if m.err != nil {
-		return errorStyle.Render("Error: ", m.err.Error())
+		return err
 	}
 
-	if !m.done {
-		if m.noAnimation {
-			return ""
-		}
-
-		var b strings.Builder
-		b.WriteString(fmt.Sprintf("%s Processing files...\n", m.spinner.View()))
-		if m.progressTotal > 0 {
-			b.WriteString(fmt.Sprintf("  %d / %d", m.progressCurrent, m.progressTotal))
-		} else {
-			b.WriteString("  Initializing...")
-		}
-		return b.String()
-	}
-
-	return m.renderSummary()
+	fmt.Print(t.renderSummary(summary))
+	return nil
 }
 
-func (m *Model) renderSummary() string {
+func (t *TUI) renderProgress() {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+
+	var b strings.Builder
+	b.WriteString(fmt.Sprintf("%s Processing files... ", t.spinner.View()))
+	if t.progressTotal > 0 {
+		b.WriteString(fmt.Sprintf("%d / %d", t.progressCurrent, t.progressTotal))
+	} else {
+		b.WriteString("Initializing...")
+	}
+	fmt.Printf("\r%s\x1b[K", b.String())
+}
+
+func (t *TUI) renderSummary(summary model.Summary) string {
 	var b strings.Builder
 
-	if m.summary.Message != "" {
-		b.WriteString(headerStyle.Render(m.summary.Message))
+	if summary.Message != "" {
+		b.WriteString(headerStyle.Render(summary.Message))
 		b.WriteString("\n\n")
 	}
 
 	hasContent := false
-	if len(m.summary.Created) > 0 {
+	if len(summary.Created) > 0 {
 		hasContent = true
 		b.WriteString(createdStyle.Render("Created:"))
 		b.WriteString("\n")
-		for _, f := range m.summary.Created {
+		for _, f := range summary.Created {
 			b.WriteString(fmt.Sprintf("  %s\n", pathStyle.Render(f)))
 		}
 	}
-	if len(m.summary.Modified) > 0 {
+	if len(summary.Modified) > 0 {
 		hasContent = true
 		b.WriteString(successStyle.Render("Modified:"))
 		b.WriteString("\n")
-		for _, f := range m.summary.Modified {
+		for _, f := range summary.Modified {
 			b.WriteString(fmt.Sprintf("  %s\n", pathStyle.Render(f)))
 		}
 	}
-	if len(m.summary.Failed) > 0 {
+	if len(summary.Failed) > 0 {
 		hasContent = true
 		b.WriteString(errorStyle.Render("Failed:"))
 		b.WriteString("\n")
-		for _, f := range m.summary.Failed {
+		for _, f := range summary.Failed {
 			b.WriteString(fmt.Sprintf("  %s\n", pathStyle.Render(f)))
 		}
 	}
 
-	if !hasContent && m.summary.Message == "" {
+	if !hasContent && summary.Message == "" {
 		b.WriteString(faintStyle.Render("Nothing to do."))
 	}
 
 	return b.String()
-}
-
-func (m *Model) runApp() tea.Msg {
-	if m.program != nil && !m.noAnimation {
-		m.app.SetProgressCallback(func(current, total int) {
-			m.program.Send(progressMsg{current: current, total: total})
-		})
-	}
-
-	summary, err := m.app.Execute()
-	if err != nil {
-		// Check for detailed error to print stack
-		if e, ok := err.(*itf.DetailedError); ok {
-			// The TUI will exit, so we can print to stderr here for the stack trace.
-			fmt.Fprintf(os.Stderr, "\n--- Stack Trace ---\n%s\n", e.Stack)
-		}
-		return errorMsg{err}
-	}
-	return summaryMsg{
-		Summary: summary,
-	}
 }

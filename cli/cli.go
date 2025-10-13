@@ -7,8 +7,6 @@ import (
 	"github.com/sokinpui/itf.go/internal/tui"
 	"github.com/sokinpui/itf.go/itf"
 	"github.com/spf13/cobra"
-
-	tea "github.com/charmbracelet/bubbletea"
 )
 
 // Config holds all the command-line flag values.
@@ -80,18 +78,18 @@ Example: pbpaste | itf -e py`,
 			return nil
 		}
 
-		model := tui.New(app, cfg.NoAnimation)
-		p := tea.NewProgram(model)
-		model.SetProgram(p)
-		if _, err := p.Run(); err != nil {
-			return fmt.Errorf("error running program: %w", err)
+		ui := tui.New(app, cfg.NoAnimation)
+		if err := ui.Run(); err != nil {
+			return err
 		}
 		return nil
 	},
 }
 
 func init() {
-	rootCmd.Flags().StringVar(&cfg.Completion, "completion", "", "Generate completion script for your shell (bash|zsh|fish|powershell)")
+	rootCmd.Flags().StringVar(&cfg.Completion,
+		"completion",
+		"", "Generate completion script for your shell (bash|zsh|fish|powershell)")
 	rootCmd.Flags().BoolVarP(&cfg.Buffer, "buffer", "b", false, "Update buffers in Neovim without saving them to disk (changes are saved by default).")
 	rootCmd.Flags().BoolVarP(&cfg.OutputTool, "output-tool", "t", false, "Print the content of tool blocks.")
 	rootCmd.Flags().BoolVarP(&cfg.OutputDiffFix, "output-diff-fix", "o", false, "Print the diff that corrected start and count.")

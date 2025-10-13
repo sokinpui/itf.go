@@ -23,6 +23,7 @@ type ToolBlock struct {
 type Summary struct {
 	Created  []string
 	Modified []string
+	Deleted  []string
 	Failed   []string
 	Message  string
 }

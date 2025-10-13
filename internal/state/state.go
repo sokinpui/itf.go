@@ -1,7 +1,6 @@
 package state
 
 import (
-	"fmt"
 	"github.com/sokinpui/itf.go/internal/fs"
 	"os"
 	"path/filepath"
@@ -9,9 +8,14 @@ import (
 	"strconv"
 	"strings"
 	"time"
+	"fmt"
 )
 
-const stateFileName = ".state.itf"
+const (
+	StateDir      = ".itf"
+	stateFileName = "state.itf"
+	TrashDir      = "trash"
+)
 
 // Operation represents a single file operation (create or modify).
 type Operation struct {
@@ -40,8 +44,11 @@ type Manager struct {
 
 // New creates and loads a state manager.
 func New() (*Manager, error) {
+	if err := os.MkdirAll(StateDir, 0755); err != nil {
+		return nil, fmt.Errorf("could not create state directory: %w", err)
+	}
 	m := &Manager{
-		statePath: filepath.Join(".", stateFileName),
+		statePath: filepath.Join(StateDir, stateFileName),
 	}
 	if err := m.load(); err != nil {
 		m.state = &State{CurrentIndex: -1, History: []HistoryEntry{}}
@@ -186,14 +193,35 @@ func (m *Manager) GetOperationsToRedo() []Operation {
 // CreateOperations prepares a list of operations from file changes.
 func CreateOperations(updatedFiles []string, fileActions map[string]string) []Operation {
 	ops := make([]Operation, len(updatedFiles))
+	trashPath := filepath.Join(StateDir, TrashDir)
+	wd, err := os.Getwd()
+	if err != nil {
+		// This is unlikely to fail, but if it does, it's a critical error.
+		panic(fmt.Sprintf("could not get current working directory: %v", err))
+	}
+
 	for i, f := range updatedFiles {
-		hash, err := fs.GetFileSHA256(f)
-		if err != nil {
+		action := fileActions[f]
+		var hash, pathForHash string
+		var opErr error
+
+		if action == "delete" {
+			relPath, err := filepath.Rel(wd, f)
+			if err != nil {
+				relPath = filepath.Base(f)
+			}
+			pathForHash = filepath.Join(trashPath, relPath)
+		} else {
+			pathForHash = f
+		}
+
+		hash, opErr = fs.GetFileSHA256(pathForHash)
+		if opErr != nil {
 			// If hashing fails, the hash will be empty, revert will likely fail the check.
 		}
 		ops[i] = Operation{
 			Path:        f,
-			Action:      fileActions[f],
+			Action:      action,
 			ContentHash: hash,
 		}
 	}

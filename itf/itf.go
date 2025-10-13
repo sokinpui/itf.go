@@ -116,7 +116,7 @@ func (a *App) processAndApply(content string) (model.Summary, error) {
 	if err != nil {
 		return model.Summary{}, fmt.Errorf("failed to create execution plan: %w", err)
 	}
-	if len(plan.Changes) == 0 && len(plan.Failed) == 0 {
+	if len(plan.Changes) == 0 && len(plan.Failed) == 0 && len(plan.Deletes) == 0 {
 		return model.Summary{Message: "No valid changes were generated. Nothing to do."}, nil
 	}
 
@@ -127,6 +127,31 @@ func (a *App) processAndApply(content string) (model.Summary, error) {
 	return a.applyChanges(plan)
 }
 
+func (a *App) deleteFiles(paths []string) (succeeded, failed []string) {
+	if len(paths) == 0 {
+		return nil, nil
+	}
+
+	trashPath := filepath.Join(state.StateDir, state.TrashDir)
+	if err := os.MkdirAll(trashPath, 0755); err != nil {
+		return nil, paths
+	}
+
+	wd, _ := os.Getwd()
+
+	for _, path := range paths {
+		if _, err := os.Stat(path); os.IsNotExist(err) {
+			continue
+		}
+		if err := fs.TrashFile(path, trashPath, wd); err != nil {
+			failed = append(failed, path)
+		} else {
+			succeeded = append(succeeded, path)
+		}
+	}
+	return succeeded, failed
+}
+
 // applyChanges connects to Neovim and applies the planned file changes.
 func (a *App) applyChanges(plan *parser.ExecutionPlan) (model.Summary, error) {
 	manager, err := nvim.New()
@@ -134,6 +159,8 @@ func (a *App) applyChanges(plan *parser.ExecutionPlan) (model.Summary, error) {
 		return model.Summary{}, err
 	}
 	defer manager.Close()
+
+	deletedFiles, failedDeletes := a.deleteFiles(plan.Deletes)
 
 	total := len(plan.Changes)
 	var nvimProgressCb func(int)
@@ -145,7 +172,7 @@ func (a *App) applyChanges(plan *parser.ExecutionPlan) (model.Summary, error) {
 	}
 
 	updatedFiles, failedFromNvim := manager.ApplyChanges(plan.Changes, nvimProgressCb)
-	allFailedFiles := append(plan.Failed, failedFromNvim...)
+	allFailedFiles := append(plan.Failed, append(failedFromNvim, failedDeletes...)...)
 
 	// Categorize files for the summary.
 	diffApplied := []string{}
@@ -172,10 +199,11 @@ func (a *App) applyChanges(plan *parser.ExecutionPlan) (model.Summary, error) {
 		}
 	}
 
-	if len(updatedFiles) > 0 {
+	allUpdatedFiles := append(updatedFiles, deletedFiles...)
+	if len(allUpdatedFiles) > 0 {
 		if !a.cfg.Buffer { // Save by default
 			manager.SaveAllBuffers()
-			ops := state.CreateOperations(updatedFiles, plan.FileActions)
+			ops := state.CreateOperations(allUpdatedFiles, plan.FileActions)
 			a.stateManager.Write(ops)
 		} else {
 			// TODO: Add this info to the summary message if needed.
@@ -185,6 +213,7 @@ func (a *App) applyChanges(plan *parser.ExecutionPlan) (model.Summary, error) {
 	summary := model.Summary{
 		Created:  created,
 		Modified: append(diffApplied, modifiedByExt...),
+		Deleted:  deletedFiles,
 		Failed:   allFailedFiles,
 	}
 	a.relativizeSummaryPaths(&summary)
@@ -346,5 +375,6 @@ func (a *App) relativizeSummaryPaths(summary *model.Summary) {
 
 	summary.Created = makeRelative(summary.Created)
 	summary.Modified = makeRelative(summary.Modified)
+	summary.Deleted = makeRelative(summary.Deleted)
 	summary.Failed = makeRelative(summary.Failed)
 }

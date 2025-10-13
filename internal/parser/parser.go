@@ -14,6 +14,7 @@ import (
 // ExecutionPlan contains all the changes and setup needed for an operation.
 type ExecutionPlan struct {
 	Changes      []model.FileChange
+	Deletes      []string
 	FileActions  map[string]string // Maps absolute path to "create" or "modify"
 	DirsToCreate map[string]struct{}
 	Failed       []string // Files that failed during planning (e.g., bad patch)
@@ -40,6 +41,7 @@ func CreatePlan(content string, resolver *fs.PathResolver, extensions []string) 
 	}
 
 	diffBlocks := extractDiffBlocksFromParsed(allBlocks)
+	deletePaths := parseDeletePaths(allBlocks, resolver)
 
 	patcherExtensions := extensions
 	if isDiffOnlyMode {
@@ -60,6 +62,17 @@ func CreatePlan(content string, resolver *fs.PathResolver, extensions []string) 
 		finalChanges[block.Path] = block
 	}
 
+	// Filter out changes for files that are marked for deletion.
+	deleteSet := make(map[string]struct{})
+	for _, path := range deletePaths {
+		deleteSet[path] = struct{}{}
+	}
+	for path := range finalChanges {
+		if _, found := deleteSet[path]; found {
+			delete(finalChanges, path)
+		}
+	}
+
 	// Convert map to slice for ordered processing.
 	planChanges := make([]model.FileChange, 0, len(finalChanges))
 	targetPaths := make([]string, 0, len(finalChanges))
@@ -69,8 +82,12 @@ func CreatePlan(content string, resolver *fs.PathResolver, extensions []string) 
 	}
 
 	actions, dirs := fs.GetFileActionsAndDirs(targetPaths)
+	for _, path := range deletePaths {
+		actions[path] = "delete"
+	}
 	return &ExecutionPlan{
 		Changes:      planChanges,
+		Deletes:      deletePaths,
 		FileActions:  actions,
 		DirsToCreate: dirs,
 		Failed:       failedPatches,
@@ -81,7 +98,7 @@ func parseFileBlocks(allBlocks []CodeBlock, resolver *fs.PathResolver, extension
 	var blocks []model.FileChange
 
 	for _, block := range allBlocks {
-		if block.Lang == "diff" || block.Lang == "tool" {
+		if block.Lang == "diff" || block.Lang == "tool" || block.Lang == "delete" {
 			continue // Diffs are handled separately.
 		}
 
@@ -189,4 +206,21 @@ func HasAllowedExtension(path string, extensions []string) bool {
 		}
 	}
 	return false
+}
+
+func parseDeletePaths(allBlocks []CodeBlock, resolver *fs.PathResolver) []string {
+	var paths []string
+	for _, block := range allBlocks {
+		if block.Lang != "delete" {
+			continue
+		}
+		lines := strings.Split(block.Content, "\n")
+		for _, line := range lines {
+			trimmed := strings.TrimSpace(line)
+			if trimmed != "" {
+				paths = append(paths, resolver.Resolve(trimmed))
+			}
+		}
+	}
+	return paths
 }

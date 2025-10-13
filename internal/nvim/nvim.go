@@ -173,6 +173,22 @@ func (m *Manager) UndoFiles(ops []state.Operation, progressCb func(int)) (undone
 }
 
 func (m *Manager) undoFile(op state.Operation) bool {
+	if op.Action == "delete" {
+		trashPath := filepath.Join(state.StateDir, state.TrashDir)
+		wd, _ := os.Getwd()
+		if err := fs.RestoreFileFromTrash(op.Path, trashPath, wd); err != nil {
+			return false
+		}
+		// Safety check: after restoring, does hash match?
+		restoredHash, err := fs.GetFileSHA256(op.Path)
+		if err != nil || restoredHash != op.ContentHash {
+			// Something is wrong. Maybe move it back to trash? For now, fail.
+			os.Remove(op.Path) // cleanup
+			return false
+		}
+		return true
+	}
+
 	currentHash, err := fs.GetFileSHA256(op.Path)
 	if err != nil {
 		if os.IsNotExist(err) {
@@ -219,9 +235,29 @@ func (m *Manager) undoFile(op state.Operation) bool {
 // RedoFiles redoes a set of operations.
 func (m *Manager) RedoFiles(ops []state.Operation, progressCb func(int)) (redone, failed []string) {
 	processFn := func(op state.Operation) (string, bool) {
-		return op.Path, m.redoFile(op.Path)
+		switch op.Action {
+		case "delete":
+			return op.Path, m.redoDelete(op)
+		case "create", "modify":
+			return op.Path, m.redoFile(op.Path)
+		default:
+			return op.Path, false
+		}
 	}
 	return processSequentially(ops, processFn, progressCb)
+}
+
+func (m *Manager) redoDelete(op state.Operation) bool {
+	// Safety check: does the file on disk match the hash we have?
+	currentHash, err := fs.GetFileSHA256(op.Path)
+	if err != nil || currentHash != op.ContentHash {
+		// File is not what we expect. Don't touch it.
+		return false
+	}
+
+	trashPath := filepath.Join(state.StateDir, state.TrashDir)
+	wd, _ := os.Getwd()
+	return fs.TrashFile(op.Path, trashPath, wd) == nil
 }
 
 func (m *Manager) redoFile(filePath string) bool {

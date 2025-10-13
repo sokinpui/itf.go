@@ -106,3 +106,40 @@ func CreateDirs(dirs map[string]struct{}) error {
 	}
 	return nil
 }
+
+// TrashFile moves a file to the trash directory, preserving its relative path.
+func TrashFile(path string, trashPath string, wd string) error {
+	relPath, err := filepath.Rel(wd, path)
+	if err != nil {
+		// Fallback for paths outside wd, though this is not expected.
+		relPath = filepath.Base(path)
+	}
+
+	destPath := filepath.Join(trashPath, relPath)
+	destDir := filepath.Dir(destPath)
+
+	if err := os.MkdirAll(destDir, 0755); err != nil {
+		return fmt.Errorf("could not create trash subdirectory: %w", err)
+	}
+
+	if err := os.Rename(path, destPath); err != nil {
+		return fmt.Errorf("could not move file to trash: %w", err)
+	}
+
+	return nil
+}
+
+// RestoreFileFromTrash moves a file from the trash back to its original location.
+func RestoreFileFromTrash(originalPath string, trashPath string, wd string) error {
+	relPath, err := filepath.Rel(wd, originalPath)
+	if err != nil {
+		relPath = filepath.Base(originalPath)
+	}
+
+	srcPath := filepath.Join(trashPath, relPath)
+	if _, err := os.Stat(srcPath); os.IsNotExist(err) {
+		return fmt.Errorf("file not found in trash: %s", srcPath)
+	}
+
+	return os.Rename(srcPath, originalPath)
+}

@@ -17,6 +17,7 @@ var (
 	headerStyle  = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("63")) // Mauve
 	createdStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("81"))            // Cyan
 	successStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("78"))            // Green
+	deletedStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("204"))           // Pink
 	errorStyle   = lipgloss.NewStyle().Foreground(lipgloss.Color("197"))           // Red
 	pathStyle    = lipgloss.NewStyle()
 	faintStyle   = lipgloss.NewStyle().Faint(true)
@@ -150,6 +151,15 @@ func (t *TUI) renderSummary(summary model.Summary) string {
 			b.WriteString(fmt.Sprintf("  %s\n", pathStyle.Render(f)))
 		}
 	}
+	if len(summary.Deleted) > 0 {
+		hasContent = true
+		b.WriteString(deletedStyle.Render("Deleted:"))
+		b.WriteString("\n")
+		for _, f := range summary.Deleted {
+			b.WriteString(fmt.Sprintf("  %s\n", pathStyle.Render(f)))
+		}
+	}
+
 	if len(summary.Failed) > 0 {
 		hasContent = true
 		b.WriteString(errorStyle.Render("Failed:"))

@@ -2,77 +2,62 @@ Golang rewrite of python [itf](https://github.com/sokinpui/itf)
 
 # ITF: Insert To File
 
-Tired of copying code from LLM Web interfaces.
+`itf` is a command-line tool that parses markdown content from stdin or your clipboard and applies the changes to your local files. It's designed to streamline workflows with Large Language Models (LLMs) by eliminating the need to manually copy and paste code snippets.
 
-Too lazy to copy and paste.
+It can create new files, modify existing ones using code blocks, or apply changes from diff blocks.
 
-Looking for free AI editor...
+## Features
 
-```
-Usage: itf [flags]
+- **Clipboard & Pipe Integration**: Reads content directly from your clipboard or standard input.
+- **File & Diff Block Parsing**: Intelligently parses markdown to identify file paths and content for file creation/modification, as well as diff hunks for patching.
+- **Neovim Integration**: Uses Neovim under the hood to apply changes, either to files on disk or just to buffers. It can connect to a running Neovim instance or start its own headless one.
+- **Undo/Redo**: Supports undoing and redoing file operations.
+- **Interactive TUI**: Provides real-time feedback on the operations being performed.
+- **Tool Call Extraction**: Can extract and print `tool` code blocks.
+- **Extensible as a Library**: Can be used as a Go library in other projects.
 
-Parse content from stdin (pipe) or clipboard to update files in Neovim.
+## Installation
 
-Example: pbpaste | itf -e py
+You can install `itf` using `go install`:
 
-Flags:
-  -b, --buffer               Update buffers in Neovim without saving them to disk (changes are saved by default).
-  -e, --extension strings    Filter by extension. Use 'diff' to process only diff blocks (e.g., 'py', 'js', 'diff').
-  -l, --lookup-dir strings   Change directory to look for files (default: current directory).
-  -o, --output-diff-fix      Print the diff that corrected start and count.
-  -r, --redo                 Redo the last undone operation.
-  -u, --undo                 Undo the last operation.
-```
-
-# Installatoin
-
-```
-go install github.com/sokinpui/itf.go/cmd/itf@v1.0.1
+```bash
+go install github.com/sokinpui/itf.go/cmd/itf@latest
 ```
 
-locally:
+## Basic Usage
 
+Copy some markdown content containing a file block to your clipboard, then run:
+
+```bash
+itf
 ```
-git clone https://github.com/sokinpui/itf.go
-cd itf.go
-git install ./cmd/itf
+
+Or, pipe content to it:
+
+```bash
+pbpaste | itf
 ```
 
-# Format
+### Example
 
-## Content file block:
+Given the following content on your clipboard:
 
-a code block that upper line contains a path
+`path/to/hello.go`
+```go
+package main
 
-for example:
-
-````
-`path/to/some/file.py`
-
+func main() {
+	println("Hello, ITF!")
+}
 ```
-print(hello)
 
-```
-````
+Running `itf` will create a new file at `path/to/hello.go` with the specified content.
 
-## diff block format:
+## Documentation
 
-start with `--- a/path/to/file` and `--- b/path/to/file`, following by `@@ -<old start>,<old count> +<new start><new count> @@`
-It doesn't matter if start and count is incorrect. I have never seen AI has generate correct start and count even line number provided
+For more detailed information, please refer to the documentation in the [`docs`](./docs) directory.
 
-You can ask AI to generate in this format.
-
-```diff
---- a/src/main.py
-+++ b/src/main.py
-@@ -1,7 +1,8 @@
- import os
-
- def main():
--    print("Hello from main!")
-+    # A new, more welcoming message
-+    print("Hello, world! Welcome to ITF.")
-
- if __name__ == "__main__":
-     main()
-```
+- [Installation](./docs/Installation/README.md)
+- [Usage](./docs/Usage/README.md)
+- [API (Library Usage)](./docs/Api/README.md)
+- [Architecture](./docs/Architecture/README.md)

@@ -1,95 +1,111 @@
-# Usage as a Go Library
+# CLI Usage
 
-The `itf` package can be used as a library in other Go applications to programmatically apply file changes from markdown content.
+`itf` is a command-line tool that reads markdown content from standard input or the clipboard and applies the contained file changes.
 
-## Installation
+## Basic Workflow
 
-To use `itf` in your project, add it as a dependency:
+1.  Copy markdown content from a web UI, document, or any other source. The content should contain file blocks or diff blocks.
+2.  Run `itf` in your terminal.
+
+`itf` will parse the content and apply the changes.
 
 ```bash
-go get github.com/sokinpui/itf.go
+# Read from clipboard
+itf
+
+# Read from stdin
+cat content.md | itf
+pbpaste | itf # on macOS
 ```
 
-## Applying Changes
+## Input Formats
 
-The primary function for library usage is `itf.Apply`. It parses a string containing markdown with file or diff blocks and applies the changes to the filesystem.
+`itf` recognizes two main types of blocks in markdown: file blocks and diff blocks.
 
-### Example
+### File Blocks
 
-Here is an example of how to use `itf.Apply` to create a new file.
+A file block is a standard markdown code block preceded by a line containing the file path in backticks.
 
+**Example: Creating a new file**
+
+````
+`path/to/new_file.go`
 ```go
 package main
 
-import (
-	"fmt"
-	"log"
-
-	"github.com/sokinpui/itf.go/cli"
-	"github.com/sokinpui/itf.go/itf"
-)
-
 func main() {
-	// Content with a file block to create a new file.
-	const content = "`src/main.go`\n" +
-		"```go\n" +
-		"package main\n\n" +
-		"func main() {\n" +
-		"\tprintln(\"Hello, ITF!\")\n" +
-		"}\n" +
-		"```"
-
-	// Configuration for the Apply function.
-	// An empty config uses default settings.
-	config := cli.Config{}
-
-	// Apply the changes.
-	summary, err := itf.Apply(content, config)
-	if err != nil {
-		log.Fatalf("Failed to apply changes: %v", err)
-	}
-
-	fmt.Println("Operation summary:")
-	fmt.Printf("  Created: %v\n", summary["Created"])
-	fmt.Printf("  Modified: %v\n", summary["Modified"])
-	fmt.Printf("  Failed: %v\n", summary["Failed"])
+    // ...
 }
+````
+
+Running `itf` with this content on the clipboard will create `path/to/new_file.go`.
+
+**Example: Modifying an existing file**
+
+If `path/to/new_file.go` already exists, `itf` will overwrite its content.
+
+### Diff Blocks
+
+A diff block is a code block with the language identifier `diff`. It should contain a standard unified diff.
+
+**Example: Applying a patch**
+
+```diff
+--- a/src/main.go
++++ b/src/main.go
+@@ -1,5 +1,6 @@
+ package main
+
+ func main() {
+-	println("Hello, ITF!")
++	println("Hello, world!")
++	println("Another line")
+ }
 ```
 
-## Extracting Tool Calls
+`itf` will attempt to apply this patch to `src/main.go`. It is robust and can correct diffs that are slightly out of date.
 
-You can also extract tool call blocks from markdown content using `itf.GetToolCall`.
+## Command-Line Flags
 
-### Example
+`itf` provides several flags to control its behavior.
 
-```go
-package main
+| Flag                | Shorthand | Description                                                                       |
+| ------------------- | --------- | --------------------------------------------------------------------------------- |
+| `--extension`       | `-e`      | Filter by file extension (e.g., `-e go -e js`). Use `-e diff` for diff-only mode. |
+| `--buffer`          | `-b`      | Apply changes to Neovim buffers without saving them to disk.                      |
+| `--undo`            | `-u`      | Undo the last operation.                                                          |
+| `--redo`            | `-r`      | Redo the last undone operation.                                                   |
+| `--output-tool`     | `-t`      | Print the content of `tool` blocks instead of applying changes.                   |
+| `--output-diff-fix` | `-o`      | Print a corrected version of the diffs found in the input.                        |
+| `--no-animation`    |           | Disable the loading spinner and progress updates.                                 |
+| `--completion`      |           | Generate a shell completion script (e.g., `bash`, `zsh`).                         |
+| `--help`            | `-h`      | Show the help message.                                                            |
 
-import (
-	"fmt"
-	"log"
+### Filtering by Extension
 
-	"github.com/sokinpui/itf.go/cli"
-	"github.com/sokinpui/itf.go/itf"
-)
+You can process only files with specific extensions.
 
-func main() {
-	const content = "Some text...\n" +
-		"```tool\n" +
-		"{\n" +
-		"    \"tool\": \"my_tool\",\n" +
-		"    \"args\": [\"--arg1\", \"value1\"]\n" +
-		"}\n" +
-		"```"
+```bash
+# Only process .go and .md files
+pbpaste | itf -e go -e md
+```
 
-	config := cli.Config{}
+### Diff-Only Mode
 
-	toolCalls, err := itf.GetToolCall(string(content), config)
-	if err != nil {
-		log.Fatalf("Failed to get tool calls: %v", err)
-	}
+To process _only_ diff blocks and ignore all file blocks, use `-e diff`.
 
-	fmt.Println("Extracted Tool Call:")
-	fmt.Println(toolCalls)
-}
+```bash
+pbpaste | itf -e diff
+```
+
+### Undo and Redo
+
+`itf` keeps a history of operations. You can easily undo and redo changes.
+
+```bash
+# Undo the last set of changes
+itf -u
+
+# Redo the changes you just undid
+itf -r
 ```

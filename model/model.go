@@ -19,10 +19,17 @@ type ToolBlock struct {
 	Content string
 }
 
+// FileRename represents a file rename operation.
+type FileRename struct {
+	OldPath string
+	NewPath string
+}
+
 // Summary holds the results of an operation for display.
 type Summary struct {
 	Created  []string
 	Modified []string
+	Renamed  []string
 	Deleted  []string
 	Failed   []string
 	Message  string

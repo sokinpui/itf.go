@@ -189,6 +189,19 @@ func (m *Manager) undoFile(op state.Operation) bool {
 		return true
 	}
 
+	if op.Action == "rename" {
+		// Undo rename is renaming NewPath back to OldPath (op.Path)
+		currentHash, err := fs.GetFileSHA256(op.NewPath)
+		if err != nil || currentHash != op.ContentHash {
+			return false
+		}
+		if _, err := os.Stat(op.Path); !os.IsNotExist(err) {
+			// Don't overwrite an existing file at the original path.
+			return false
+		}
+		return os.Rename(op.NewPath, op.Path) == nil
+	}
+
 	currentHash, err := fs.GetFileSHA256(op.Path)
 	if err != nil {
 		if os.IsNotExist(err) {
@@ -240,11 +253,27 @@ func (m *Manager) RedoFiles(ops []state.Operation, progressCb func(int)) (redone
 			return op.Path, m.redoDelete(op)
 		case "create", "modify":
 			return op.Path, m.redoFile(op.Path)
+		case "rename":
+			return op.Path, m.redoRename(op)
 		default:
 			return op.Path, false
 		}
 	}
 	return processSequentially(ops, processFn, progressCb)
+}
+
+func (m *Manager) redoRename(op state.Operation) bool {
+	// Redo rename is renaming OldPath (op.Path) to NewPath
+	currentHash, err := fs.GetFileSHA256(op.Path)
+	if err != nil || currentHash != op.ContentHash {
+		return false
+	}
+	if _, err := os.Stat(op.NewPath); !os.IsNotExist(err) {
+		// Don't overwrite an existing file at the new path.
+		return false
+	}
+
+	return os.Rename(op.Path, op.NewPath) == nil
 }
 
 func (m *Manager) redoDelete(op state.Operation) bool {

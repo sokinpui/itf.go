@@ -16,6 +16,7 @@ import (
 var (
 	headerStyle  = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("63")) // Mauve
 	createdStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("81"))            // Cyan
+	renamedStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("212"))           // Purple
 	successStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("78"))            // Green
 	deletedStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("204"))           // Pink
 	errorStyle   = lipgloss.NewStyle().Foreground(lipgloss.Color("197"))           // Red
@@ -148,6 +149,14 @@ func (t *TUI) renderSummary(summary model.Summary) string {
 		b.WriteString(successStyle.Render("Modified:"))
 		b.WriteString("\n")
 		for _, f := range summary.Modified {
+			b.WriteString(fmt.Sprintf("  %s\n", pathStyle.Render(f)))
+		}
+	}
+	if len(summary.Renamed) > 0 {
+		hasContent = true
+		b.WriteString(renamedStyle.Render("Renamed:"))
+		b.WriteString("\n")
+		for _, f := range summary.Renamed {
 			b.WriteString(fmt.Sprintf("  %s\n", pathStyle.Render(f)))
 		}
 	}

@@ -1,14 +1,16 @@
 package state
 
 import (
-	"github.com/sokinpui/itf.go/internal/fs"
+	"fmt"
 	"os"
 	"path/filepath"
 	"sort"
 	"strconv"
 	"strings"
 	"time"
-	"fmt"
+
+	"github.com/sokinpui/itf.go/internal/fs"
+	"github.com/sokinpui/itf.go/model"
 )
 
 const (
@@ -22,6 +24,7 @@ type Operation struct {
 	Path        string
 	Action      string
 	ContentHash string // SHA256 hash of the file content after operation
+	NewPath     string
 }
 
 // HistoryEntry represents one complete run of the tool.
@@ -106,15 +109,25 @@ func (m *Manager) load() error {
 
 		entry := HistoryEntry{Timestamp: ts}
 		opLines := lines[1:]
-		if len(opLines)%3 != 0 {
-			return fmt.Errorf("invalid state file: incomplete operation record")
-		}
 
-		for i := 0; i < len(opLines); i += 3 {
+		i := 0
+		for i < len(opLines) {
+			if i+3 > len(opLines) {
+				return fmt.Errorf("invalid state file: incomplete operation record")
+			}
+			action := opLines[i]
 			op := Operation{
-				Action:      opLines[i],
+				Action:      action,
 				Path:        opLines[i+1],
 				ContentHash: opLines[i+2],
+			}
+			i += 3
+			if action == "rename" {
+				if i >= len(opLines) {
+					return fmt.Errorf("invalid state file: incomplete rename operation record")
+				}
+				op.NewPath = opLines[i]
+				i++
 			}
 			entry.Operations = append(entry.Operations, op)
 		}
@@ -140,6 +153,9 @@ func (m *Manager) save() {
 			opLines = append(opLines, op.Action)
 			opLines = append(opLines, op.Path)
 			opLines = append(opLines, op.ContentHash)
+			if op.Action == "rename" {
+				opLines = append(opLines, op.NewPath)
+			}
 		}
 		entryBuilder.WriteString(strings.Join(opLines, "\n"))
 		blocks = append(blocks, entryBuilder.String())
@@ -191,39 +207,49 @@ func (m *Manager) GetOperationsToRedo() []Operation {
 }
 
 // CreateOperations prepares a list of operations from file changes.
-func CreateOperations(updatedFiles []string, fileActions map[string]string) []Operation {
-	ops := make([]Operation, len(updatedFiles))
+func CreateOperations(updatedFiles []string, fileActions map[string]string, renames []model.FileRename) []Operation {
+	ops := make([]Operation, 0, len(updatedFiles))
 	trashPath := filepath.Join(StateDir, TrashDir)
 	wd, err := os.Getwd()
 	if err != nil {
 		// This is unlikely to fail, but if it does, it's a critical error.
 		panic(fmt.Sprintf("could not get current working directory: %v", err))
 	}
+	renameMap := make(map[string]string)
+	for _, r := range renames {
+		renameMap[r.OldPath] = r.NewPath
+	}
 
-	for i, f := range updatedFiles {
+	for _, f := range updatedFiles {
 		action := fileActions[f]
-		var hash, pathForHash string
+		var hash, pathForHash, newPath string
 		var opErr error
 
-		if action == "delete" {
+		switch action {
+		case "delete":
 			relPath, err := filepath.Rel(wd, f)
 			if err != nil {
 				relPath = filepath.Base(f)
 			}
 			pathForHash = filepath.Join(trashPath, relPath)
-		} else {
+		case "rename":
+			newPath = renameMap[f]
+			pathForHash = newPath // hash the new file
+		default: // create, modify
 			pathForHash = f
 		}
 
 		hash, opErr = fs.GetFileSHA256(pathForHash)
 		if opErr != nil {
 			// If hashing fails, the hash will be empty, revert will likely fail the check.
+			hash = ""
 		}
-		ops[i] = Operation{
+		ops = append(ops, Operation{
 			Path:        f,
 			Action:      action,
 			ContentHash: hash,
-		}
+			NewPath:     newPath,
+		})
 	}
 	sort.Slice(ops, func(i, j int) bool {
 		return ops[i].Path < ops[j].Path

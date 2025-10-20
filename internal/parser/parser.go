@@ -2,6 +2,7 @@ package parser
 
 import (
 	"fmt"
+	"os"
 	"path/filepath"
 	"regexp"
 	"strings"
@@ -15,6 +16,7 @@ import (
 type ExecutionPlan struct {
 	Changes      []model.FileChange
 	Deletes      []string
+	Renames      []model.FileRename
 	FileActions  map[string]string // Maps absolute path to "create" or "modify"
 	DirsToCreate map[string]struct{}
 	Failed       []string // Files that failed during planning (e.g., bad patch)
@@ -42,6 +44,7 @@ func CreatePlan(content string, resolver *fs.PathResolver, extensions []string) 
 
 	diffBlocks := extractDiffBlocksFromParsed(allBlocks)
 	deletePaths := parseDeletePaths(allBlocks, resolver)
+	renames := parseRenameBlocks(allBlocks, resolver)
 
 	patcherExtensions := extensions
 	if isDiffOnlyMode {
@@ -63,12 +66,15 @@ func CreatePlan(content string, resolver *fs.PathResolver, extensions []string) 
 	}
 
 	// Filter out changes for files that are marked for deletion.
-	deleteSet := make(map[string]struct{})
+	deleteAndRenameSet := make(map[string]struct{})
 	for _, path := range deletePaths {
-		deleteSet[path] = struct{}{}
+		deleteAndRenameSet[path] = struct{}{}
+	}
+	for _, rename := range renames {
+		deleteAndRenameSet[rename.OldPath] = struct{}{}
 	}
 	for path := range finalChanges {
-		if _, found := deleteSet[path]; found {
+		if _, found := deleteAndRenameSet[path]; found {
 			delete(finalChanges, path)
 		}
 	}
@@ -85,9 +91,19 @@ func CreatePlan(content string, resolver *fs.PathResolver, extensions []string) 
 	for _, path := range deletePaths {
 		actions[path] = "delete"
 	}
+	for _, rename := range renames {
+		actions[rename.OldPath] = "rename"
+		dir := filepath.Dir(rename.NewPath)
+		if dir != "." && dir != "/" {
+			if _, err := os.Stat(dir); os.IsNotExist(err) {
+				dirs[dir] = struct{}{}
+			}
+		}
+	}
 	return &ExecutionPlan{
 		Changes:      planChanges,
 		Deletes:      deletePaths,
+		Renames:      renames,
 		FileActions:  actions,
 		DirsToCreate: dirs,
 		Failed:       failedPatches,
@@ -98,7 +114,7 @@ func parseFileBlocks(allBlocks []CodeBlock, resolver *fs.PathResolver, extension
 	var blocks []model.FileChange
 
 	for _, block := range allBlocks {
-		if block.Lang == "diff" || block.Lang == "tool" || block.Lang == "delete" {
+		if block.Lang == "diff" || block.Lang == "tool" || block.Lang == "delete" || block.Lang == "rename" {
 			continue // Diffs are handled separately.
 		}
 
@@ -223,4 +239,29 @@ func parseDeletePaths(allBlocks []CodeBlock, resolver *fs.PathResolver) []string
 		}
 	}
 	return paths
+}
+
+func parseRenameBlocks(allBlocks []CodeBlock, resolver *fs.PathResolver) []model.FileRename {
+	var renames []model.FileRename
+	for _, block := range allBlocks {
+		if block.Lang != "rename" {
+			continue
+		}
+		lines := strings.Split(block.Content, "\n")
+		for _, line := range lines {
+			trimmed := strings.TrimSpace(line)
+			if trimmed == "" {
+				continue
+			}
+			parts := strings.Fields(trimmed)
+			if len(parts) != 2 {
+				continue
+			}
+			renames = append(renames, model.FileRename{
+				OldPath: resolver.Resolve(parts[0]),
+				NewPath: resolver.Resolve(parts[1]),
+			})
+		}
+	}
+	return renames
 }

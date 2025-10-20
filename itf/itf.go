@@ -116,7 +116,7 @@ func (a *App) processAndApply(content string) (model.Summary, error) {
 	if err != nil {
 		return model.Summary{}, fmt.Errorf("failed to create execution plan: %w", err)
 	}
-	if len(plan.Changes) == 0 && len(plan.Failed) == 0 && len(plan.Deletes) == 0 {
+	if len(plan.Changes) == 0 && len(plan.Failed) == 0 && len(plan.Deletes) == 0 && len(plan.Renames) == 0 {
 		return model.Summary{Message: "No valid changes were generated. Nothing to do."}, nil
 	}
 
@@ -152,6 +152,28 @@ func (a *App) deleteFiles(paths []string) (succeeded, failed []string) {
 	return succeeded, failed
 }
 
+func (a *App) renameFiles(renames []model.FileRename) (map[string]string, []string) {
+	if len(renames) == 0 {
+		return nil, nil
+	}
+
+	succeeded := make(map[string]string)
+	var failed []string
+
+	for _, r := range renames {
+		if _, err := os.Stat(r.OldPath); os.IsNotExist(err) {
+			failed = append(failed, fmt.Sprintf("%s -> %s (source not found)", r.OldPath, r.NewPath))
+			continue
+		}
+		if err := os.Rename(r.OldPath, r.NewPath); err != nil {
+			failed = append(failed, fmt.Sprintf("%s -> %s", r.OldPath, r.NewPath))
+		} else {
+			succeeded[r.OldPath] = r.NewPath
+		}
+	}
+	return succeeded, failed
+}
+
 // applyChanges connects to Neovim and applies the planned file changes.
 func (a *App) applyChanges(plan *parser.ExecutionPlan) (model.Summary, error) {
 	manager, err := nvim.New()
@@ -161,6 +183,11 @@ func (a *App) applyChanges(plan *parser.ExecutionPlan) (model.Summary, error) {
 	defer manager.Close()
 
 	deletedFiles, failedDeletes := a.deleteFiles(plan.Deletes)
+	renamedFilesMap, failedRenames := a.renameFiles(plan.Renames)
+	renamedFilesForSummary := []string{}
+	for old, new := range renamedFilesMap {
+		renamedFilesForSummary = append(renamedFilesForSummary, fmt.Sprintf("%s -> %s", old, new))
+	}
 
 	total := len(plan.Changes)
 	var nvimProgressCb func(int)
@@ -172,7 +199,7 @@ func (a *App) applyChanges(plan *parser.ExecutionPlan) (model.Summary, error) {
 	}
 
 	updatedFiles, failedFromNvim := manager.ApplyChanges(plan.Changes, nvimProgressCb)
-	allFailedFiles := append(plan.Failed, append(failedFromNvim, failedDeletes...)...)
+	allFailedFiles := append(plan.Failed, append(failedFromNvim, append(failedDeletes, failedRenames...)...)...)
 
 	// Categorize files for the summary.
 	diffApplied := []string{}
@@ -199,11 +226,16 @@ func (a *App) applyChanges(plan *parser.ExecutionPlan) (model.Summary, error) {
 		}
 	}
 
-	allUpdatedFiles := append(updatedFiles, deletedFiles...)
+	successfulRenameOldPaths := []string{}
+	for oldPath := range renamedFilesMap {
+		successfulRenameOldPaths = append(successfulRenameOldPaths, oldPath)
+	}
+	allUpdatedFiles := append(append(updatedFiles, deletedFiles...), successfulRenameOldPaths...)
+
 	if len(allUpdatedFiles) > 0 {
 		if !a.cfg.Buffer { // Save by default
 			manager.SaveAllBuffers()
-			ops := state.CreateOperations(allUpdatedFiles, plan.FileActions)
+			ops := state.CreateOperations(allUpdatedFiles, plan.FileActions, plan.Renames)
 			a.stateManager.Write(ops)
 		} else {
 			// TODO: Add this info to the summary message if needed.
@@ -213,6 +245,7 @@ func (a *App) applyChanges(plan *parser.ExecutionPlan) (model.Summary, error) {
 	summary := model.Summary{
 		Created:  created,
 		Modified: append(diffApplied, modifiedByExt...),
+		Renamed:  renamedFilesForSummary,
 		Deleted:  deletedFiles,
 		Failed:   allFailedFiles,
 	}
@@ -373,8 +406,30 @@ func (a *App) relativizeSummaryPaths(summary *model.Summary) {
 		return relPaths
 	}
 
+	makeRelativeRenames := func(renames []string) []string {
+		relRenames := make([]string, len(renames))
+		for i, r := range renames {
+			parts := strings.Split(r, " -> ")
+			if len(parts) != 2 {
+				relRenames[i] = r // fallback
+				continue
+			}
+			oldRel, err1 := filepath.Rel(wd, parts[0])
+			newRel, err2 := filepath.Rel(wd, parts[1])
+			if err1 != nil {
+				oldRel = parts[0]
+			}
+			if err2 != nil {
+				newRel = parts[1]
+			}
+			relRenames[i] = fmt.Sprintf("%s -> %s", oldRel, newRel)
+		}
+		return relRenames
+	}
+
 	summary.Created = makeRelative(summary.Created)
 	summary.Modified = makeRelative(summary.Modified)
+	summary.Renamed = makeRelativeRenames(summary.Renamed)
 	summary.Deleted = makeRelative(summary.Deleted)
 	summary.Failed = makeRelative(summary.Failed)
 }

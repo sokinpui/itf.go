@@ -65,6 +65,32 @@ A diff block is a code block with the language identifier `diff`. It should cont
 
 `itf` will attempt to apply this patch to `src/main.go`. It is robust and can correct diffs that are slightly out of date.
 
+### Delete Blocks
+
+A delete block is a code block with the language identifier `delete`. It should contain a list of file paths to be deleted, one per line.
+
+**Example: Deleting files**
+
+```delete
+path/to/obsolete_file.go
+old_data.json
+```
+
+`itf` will move these files to a trash directory within its state folder (`.itf/trash/`) to allow for undoing the operation.
+
+### Rename Blocks
+
+A rename block is a code block with the language identifier `rename`. It should contain a list of old and new file paths, separated by a space, one pair per line.
+
+**Example: Renaming files**
+
+```rename
+src/old_name.go src/new_name.go
+config.yaml config.yml
+```
+
+`itf` will rename these files. This operation can also be undone.
+
 ## Command-Line Flags
 
 `itf` provides several flags to control its behavior.

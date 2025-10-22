@@ -132,7 +132,7 @@ func (a *App) deleteFiles(paths []string) (succeeded, failed []string) {
 		return nil, nil
 	}
 
-	trashPath := filepath.Join(state.StateDir, state.TrashDir)
+	trashPath := filepath.Join(a.stateManager.StateDir, state.TrashDir)
 	if err := os.MkdirAll(trashPath, 0755); err != nil {
 		return nil, paths
 	}
@@ -235,7 +235,7 @@ func (a *App) applyChanges(plan *parser.ExecutionPlan) (model.Summary, error) {
 	if len(allUpdatedFiles) > 0 {
 		if !a.cfg.Buffer { // Save by default
 			manager.SaveAllBuffers()
-			ops := state.CreateOperations(allUpdatedFiles, plan.FileActions, plan.Renames)
+			ops := a.stateManager.CreateOperations(allUpdatedFiles, plan.FileActions, plan.Renames)
 			a.stateManager.Write(ops)
 		} else {
 			// TODO: Add this info to the summary message if needed.
@@ -339,7 +339,7 @@ func (a *App) undoLastOperation() (model.Summary, error) {
 		}
 	}
 
-	undone, failed := manager.UndoFiles(ops, nvimProgressCb)
+	undone, failed := manager.UndoFiles(ops, a.stateManager.StateDir, nvimProgressCb)
 
 	summary := model.Summary{
 		Modified: undone,
@@ -372,7 +372,7 @@ func (a *App) redoLastOperation() (model.Summary, error) {
 		}
 	}
 
-	redone, failed := manager.RedoFiles(ops, nvimProgressCb)
+	redone, failed := manager.RedoFiles(ops, a.stateManager.StateDir, nvimProgressCb)
 
 	summary := model.Summary{
 		Modified: redone,

@@ -3,6 +3,7 @@ package state
 import (
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"sort"
 	"strconv"
@@ -14,7 +15,7 @@ import (
 )
 
 const (
-	StateDir      = ".itf"
+	stateDirName  = ".itf"
 	stateFileName = "state.itf"
 	TrashDir      = "trash"
 )
@@ -43,15 +44,36 @@ type State struct {
 type Manager struct {
 	statePath string
 	state     *State
+	StateDir  string
+}
+
+// findGitRoot finds the root of the git repository.
+func findGitRoot() (string, error) {
+	cmd := exec.Command("git", "rev-parse", "--show-toplevel")
+	output, err := cmd.Output()
+	if err != nil {
+		return "", err
+	}
+	return strings.TrimSpace(string(output)), nil
 }
 
 // New creates and loads a state manager.
 func New() (*Manager, error) {
-	if err := os.MkdirAll(StateDir, 0755); err != nil {
+	rootDir, err := findGitRoot()
+	if err != nil {
+		rootDir, err = os.Getwd()
+		if err != nil {
+			return nil, fmt.Errorf("could not get current working directory: %w", err)
+		}
+	}
+
+	stateDir := filepath.Join(rootDir, stateDirName)
+	if err := os.MkdirAll(stateDir, 0755); err != nil {
 		return nil, fmt.Errorf("could not create state directory: %w", err)
 	}
 	m := &Manager{
-		statePath: filepath.Join(StateDir, stateFileName),
+		statePath: filepath.Join(stateDir, stateFileName),
+		StateDir:  stateDir,
 	}
 	if err := m.load(); err != nil {
 		m.state = &State{CurrentIndex: -1, History: []HistoryEntry{}}
@@ -207,9 +229,9 @@ func (m *Manager) GetOperationsToRedo() []Operation {
 }
 
 // CreateOperations prepares a list of operations from file changes.
-func CreateOperations(updatedFiles []string, fileActions map[string]string, renames []model.FileRename) []Operation {
+func (m *Manager) CreateOperations(updatedFiles []string, fileActions map[string]string, renames []model.FileRename) []Operation {
 	ops := make([]Operation, 0, len(updatedFiles))
-	trashPath := filepath.Join(StateDir, TrashDir)
+	trashPath := filepath.Join(m.StateDir, TrashDir)
 	wd, err := os.Getwd()
 	if err != nil {
 		// This is unlikely to fail, but if it does, it's a critical error.

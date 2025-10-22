@@ -165,16 +165,16 @@ func (m *Manager) SaveAllBuffers() {
 }
 
 // UndoFiles reverts a set of operations.
-func (m *Manager) UndoFiles(ops []state.Operation, progressCb func(int)) (undone, failed []string) {
+func (m *Manager) UndoFiles(ops []state.Operation, stateDir string, progressCb func(int)) (undone, failed []string) {
 	processFn := func(op state.Operation) (string, bool) {
-		return op.Path, m.undoFile(op)
+		return op.Path, m.undoFile(op, stateDir)
 	}
 	return processSequentially(ops, processFn, progressCb)
 }
 
-func (m *Manager) undoFile(op state.Operation) bool {
+func (m *Manager) undoFile(op state.Operation, stateDir string) bool {
 	if op.Action == "delete" {
-		trashPath := filepath.Join(state.StateDir, state.TrashDir)
+		trashPath := filepath.Join(stateDir, state.TrashDir)
 		wd, _ := os.Getwd()
 		if err := fs.RestoreFileFromTrash(op.Path, trashPath, wd); err != nil {
 			return false
@@ -246,11 +246,11 @@ func (m *Manager) undoFile(op state.Operation) bool {
 }
 
 // RedoFiles redoes a set of operations.
-func (m *Manager) RedoFiles(ops []state.Operation, progressCb func(int)) (redone, failed []string) {
+func (m *Manager) RedoFiles(ops []state.Operation, stateDir string, progressCb func(int)) (redone, failed []string) {
 	processFn := func(op state.Operation) (string, bool) {
 		switch op.Action {
 		case "delete":
-			return op.Path, m.redoDelete(op)
+			return op.Path, m.redoDelete(op, stateDir)
 		case "create", "modify":
 			return op.Path, m.redoFile(op.Path)
 		case "rename":
@@ -276,7 +276,7 @@ func (m *Manager) redoRename(op state.Operation) bool {
 	return os.Rename(op.Path, op.NewPath) == nil
 }
 
-func (m *Manager) redoDelete(op state.Operation) bool {
+func (m *Manager) redoDelete(op state.Operation, stateDir string) bool {
 	// Safety check: does the file on disk match the hash we have?
 	currentHash, err := fs.GetFileSHA256(op.Path)
 	if err != nil || currentHash != op.ContentHash {
@@ -284,7 +284,7 @@ func (m *Manager) redoDelete(op state.Operation) bool {
 		return false
 	}
 
-	trashPath := filepath.Join(state.StateDir, state.TrashDir)
+	trashPath := filepath.Join(stateDir, state.TrashDir)
 	wd, _ := os.Getwd()
 	return fs.TrashFile(op.Path, trashPath, wd) == nil
 }
